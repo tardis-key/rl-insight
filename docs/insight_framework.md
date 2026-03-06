@@ -1,3 +1,5 @@
+# Insight Framework
+
 <div align="center">
  <img src="https://github.com/tardis-key/rl-insight/blob/main/assets/rl_insight_framework.svg" width="600" alt="rl-insight-arch.png">
 </div>
