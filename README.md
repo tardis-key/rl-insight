@@ -1,19 +1,13 @@
-# verl: Volcano Engine Reinforcement Learning for LLMs
+# RL-Insight: Provide performance insight capabilities for RL frameworks.
 <div align="center">
 
-<a href="https://deepwiki.com/volcengine/verl"><img src="https://devin.ai/assets/deepwiki-badge.png" alt="Ask DeepWiki.com" style="height:20px;"></a>
-[![GitHub Repo stars](https://img.shields.io/github/stars/volcengine/verl)](https://github.com/volcengine/verl/stargazers)
+<a href="https://deepwiki.com/volcengine/verl"><img src="https://devin.ai/assets/deepwiki-badge.png" alt="Ask DeepWiki.com WIP" style="height:20px;"></a>
+[![GitHub Repo stars](https://img.shields.io/github/stars/verl-project/rl-insight)](https://github.com/verl-project/rl-insight/stargazers)
 [![Twitter](https://img.shields.io/twitter/follow/verl_project)](https://twitter.com/verl_project)
-<a href="https://join.slack.com/t/verl-project/shared_invite/zt-3c6mc2khw-v0lo6NfDPuFP6OnkrZwfqw"><img src="https://img.shields.io/badge/Slack-verl-blueviolet?logo=slack&amp"></a>
-<a href="https://arxiv.org/pdf/2409.19256"><img src="https://img.shields.io/static/v1?label=EuroSys&message=Paper&color=red"></a>
-[![Documentation](https://img.shields.io/badge/documentation-blue)](https://verl.readthedocs.io/en/latest/)
-<a href="https://raw.githubusercontent.com/eric-haibin-lin/verl-community/refs/heads/main/WeChat.JPG"><img src="https://img.shields.io/badge/微信-green?logo=wechat&amp"></a>
+[![Documentation WIP](https://img.shields.io/badge/documentation-blue)](https://verl.readthedocs.io/en/latest/)
 
 </div>
 
-verl is a flexible, efficient and production-ready RL training library for large language models (LLMs).
-
-verl is the open-source version of **[HybridFlow: A Flexible and Efficient RLHF Framework](https://arxiv.org/abs/2409.19256v2)** paper.
 
 introduction of rl-insight
 
@@ -21,8 +15,12 @@ introduction of rl-insight
 - 2
 
 <div align="center">
- <img src="https://github.com/tardis-key/rl-insight/blob/main/assets/rl_insight_framework.svg" width="400" alt="rl-insight-arch.png">
+ <img src="https://github.com/tardis-key/rl-insight/blob/main/assets/rl_insight_framework.svg" width="600" alt="rl-insight-arch.png">
 </div>
+
+## Insight Framework
+
+todo
 
 ## Key Features
 
