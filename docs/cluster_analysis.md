@@ -4,6 +4,8 @@
 
 RL-Insight 是一个强化学习性能数据快速分析的可视化工具，基于 VeRL 框架采集的 profiling 数据进行解析，生成强化学习各阶段的 Timeline 图表。
 
+更完整的数据目录与 JSON 字段约定见 [数据规格与格式说明](./data/data_specification.md)。
+
 ### 主要功能
 
 - **数据解析**：支持解析 VeRL 框架采集的多格式 profiling 数据
@@ -13,27 +15,27 @@ RL-Insight 是一个强化学习性能数据快速分析的可视化工具，基
 
 ### 软件依赖
 
-- Python
-- Pandas
-- Plotly
-- NumPy
-- Loguru
+依赖版本以仓库根目录 [`requirements.txt`](../requirements.txt) 为准（含 **pandas、plotly、numpy、loguru** 等）。开发/运行前请安装：
+
+```bash
+pip install -r requirements.txt
+```
+
+若需从本地源码直接运行 `python -m rl_insight.main`，建议再执行：
+
+```bash
+pip install -e .
+```
 
 ## 二、快速使用
 
-### 2.1 安装依赖
-
-```bash
-pip install pandas plotly numpy
-```
-
-### 2.2 采集 Profiling 数据
+### 2.1 采集 Profiling 数据
 
 使用 VeRL 框架采集性能数据，详细参考：
 
 [VeRL NPU Profiling 教程](https://github.com/verl-project/verl/blob/main/docs/ascend_tutorial/profiling/ascend_profiling_zh.rst)
 
-### 2.3 执行分析脚本
+### 2.2 执行分析脚本
 
 #### MSTX 使用示例
 
@@ -44,7 +46,7 @@ python -m rl_insight.main \
    --output-path <output_path>
 ```
 
-或修改并直接使用examples/mstx_exec.sh脚本:
+或修改并直接使用 `examples/mstx_exec.sh` 脚本:
 
 ```bash
 bash examples/mstx_exec.sh
@@ -52,7 +54,7 @@ bash examples/mstx_exec.sh
 
 #### Torch Profiler 解析示例
 
-从最新版本开始，工具支持解析 PyTorch Profiler 采集的性能数据（`torch` 类型）。
+工具支持解析 PyTorch Profiler 采集的性能数据（`torch` 类型）。
 
 ```bash
 python -m rl_insight.main \
@@ -61,7 +63,7 @@ python -m rl_insight.main \
     --output-path <output_path>
 ```
 
-或修改并直接使用examples/torch_profiler_exec.sh脚本:
+或修改并直接使用 `examples/torch_profiler_exec.sh` 脚本:
 
 ```bash
 bash examples/torch_profiler_exec.sh
@@ -69,14 +71,17 @@ bash examples/torch_profiler_exec.sh
 
 ## 三、命令行参数
 
+以下说明与 `python -m rl_insight.main --help` 保持一致；若有出入以命令行帮助为准。
+
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--input-path` | `test` | Profiling 数据的原始路径 |
-| `--profiler-type` | `mstx` | 性能数据种类（支持 `mstx` 和 `torch`） |
-| `--output-path` | `test` | 输出路径 |
-| `--vis-type` | `html` | 可视化类型（当前仅支持 html） |
-| `--rank-list` | `all` | Rank ID 列表（当前仅支持 "all"） |
-
+| `--input-path` | （必填，无默认值） | Profiling 数据的根目录路径 |
+| `--input-type` | `multi_json` | 输入数据类型（多目录 JSON 布局等） |
+| `--profiler-type` | `mstx` | 性能数据种类：`mstx`、`torch` |
+| `--output-path` | `output` | 输出目录 |
+| `--vis-type` | `html` | 可视化类型（当前仅支持 `html`） |
+| `--rank-list` | `all` | Rank ID 列表（当前仅支持 `all`） |
+| `--pipeline-type` | `OfflineInsightPipeline` | 流水线实现类型 |
 
 ## 四、输出说明
 
@@ -102,16 +107,18 @@ bash examples/torch_profiler_exec.sh
 ## 五、注意事项
 
 1. RL 分析功能当前仅支持处理所有 Rank（`--rank-list` 参数暂不支持过滤功能）
-2. 至少采集 level0 及以上数据（不支持level_none级数据）
+2. 至少采集 level0 及以上数据（不支持 level_none 级数据）
 3. 采用离散模式采集 `discrete=True`
 4. MSTX 数据满足以下要求：
    - 采集数据需经过解析，仅支持使用离线解析方式（analyse=False）
-   - 离线解析参考 [MSTX profiling 离线解析](/docs/utils/mstx_preprocessing.md)
+   - 离线解析参考 [MSTX profiling 离线解析](./utils/mstx_preprocessing.md)
    - 输入路径下需包含 `*_ascend_pt` 目录
    - 每个 ascend_pt 目录下需包含 `profiler_info_*.json` 文件
    - trace_view.json 文件位于 `ASCEND_PROFILER_OUTPUT` 子目录中
-5. torch数据满足以下要求：
-   - 输入路径下需包含以 `.json.gz` 结尾的 PyTorch Profiler 数据文件，即verl仓目前默认torch_profile采集数据保存格式
+5. torch 数据满足以下要求：
+   - 输入路径下需包含以 `.json.gz` 结尾的 PyTorch Profiler 数据文件，即 verl 仓目前默认 torch_profile 采集数据保存格式
    - 系统会自动过滤包含 `async_llm` 关键字的文件
    - 每个数据文件需包含有效的 `traceEvents` 和 `distributedInfo` 字段
    - Rank ID 将从 `distributedInfo.rank` 字段自动提取
+
+目录与 JSON 字段的集中说明另见 [数据规格与格式说明](./data/data_specification.md)。运行时校验逻辑以 `rl_insight.data.DataChecker` 及 [`rl_insight/data/rules.py`](../rl_insight/data/rules.py) 中的规则定义为准。

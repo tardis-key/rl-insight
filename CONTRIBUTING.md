@@ -37,21 +37,26 @@ pre-commit install
 pre-commit run
 # for all files in the repo
 pre-commit run --all-files
-# run a specific hook with pre-commit
-# pre-commit run --all-files --show-diff-on-failure --color=always <hood-id>
+# run a specific hook (example)
 pre-commit run --all-files --show-diff-on-failure --color=always ruff
-pre-commit run --all-files --show-diff-on-failure --color=always autogen-trainer-cfg
+pre-commit run --all-files --show-diff-on-failure --color=always mypy
 ```
 
 ## Testing
+
+Run the test suite locally:
+
+```bash
+pytest
+```
 
 ### Adding CI tests
 
 If possible, please add CI test(s) for your new feature:
 
-1. Find the most relevant workflow yml file, which usually corresponds to a `hydra` default config.
+1. Find the most relevant workflow file under `.github/workflows/`.
 2. Add related path patterns to the `paths` section if not already included.
-3. Minimize the workload of the test script(s) (see existing scripts for examples).
+3. Minimize the workload of the test script(s) (see existing workflows for examples).
 
 ## Building the Docs
 

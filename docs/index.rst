@@ -24,9 +24,9 @@ and visualization.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Data Directory
+   :caption: Data specification
 
-   data/data_directory
+   data/data_specification
 
 Contribution
 -------------

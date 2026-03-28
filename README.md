@@ -29,8 +29,6 @@ In RL-Insight, we define [a general pipeline](https://github.com/verl-project/rl
 
 **Quickstart:**
 
-- [Installation WIP]()
-- [Quickstart WIP]()
 - [Offline Cluster Analysis Quickstart](docs/cluster_analysis.md)
 
 ## Contribution Guide
