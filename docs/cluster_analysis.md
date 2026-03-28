@@ -4,7 +4,7 @@
 
 RL-Insight 是一个强化学习性能数据快速分析的可视化工具，基于 VeRL 框架采集的 profiling 数据进行解析，生成强化学习各阶段的 Timeline 图表。
 
-更完整的数据目录与 JSON 字段约定见 [数据规格与格式说明](./data/data_specification.md)。
+模块划分、流水线与扩展步骤见 [架构与开发指导](./architecture_and_guideline.md)。更完整的数据目录与 JSON 字段约定见 [数据规格与格式说明](./data/data_specification.md)。
 
 ### 主要功能
 

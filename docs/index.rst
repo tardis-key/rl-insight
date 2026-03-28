@@ -13,20 +13,20 @@ and visualization.
    :maxdepth: 2
    :caption: Overview
 
-   insight_framework
-   cluster_analysis
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Getting Started
-
-   README <../README.md>
+   Architecture & developer guideline <architecture_and_guideline>
+   RL Timeline quickstart <cluster_analysis>
 
 .. toctree::
    :maxdepth: 2
    :caption: Data specification
 
    data/data_specification
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Getting Started
+
+   README <../README.md>
 
 Contribution
 -------------
