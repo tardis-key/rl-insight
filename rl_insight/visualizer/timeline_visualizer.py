@@ -17,7 +17,6 @@ import os
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from loguru import logger
 
 from rl_insight.data import DataEnum
 from rl_insight.utils.schema import FigureConfig
@@ -50,17 +49,9 @@ class RLTimelineVisualizer(BaseVisualizer):
     def __init__(self, config: dict):
         super().__init__(config)
         self.output_path = config.get("output_path", None)
-        self.vis_type = config.get("vis_type", None)
 
     def run(self, data):
-        if self.vis_type == "html":
-            return self.generate_rl_timeline(data)
-        if self.vis_type == "chart":
-            logger.info("in chart")
-            return None
-        raise ValueError(
-            f"Unsupported vis_type: {self.vis_type!r}. Supported: 'html', 'chart'"
-        )
+        return self.generate_rl_timeline(data)
 
     def generate_rl_timeline(
         self,

@@ -41,10 +41,7 @@ class OfflineInsightPipeline:
         }
 
     def _prepare_visualizer_config(self):
-        return {
-            "output_path": self.config.output_path,
-            "vis_type": self.config.vis_type,
-        }
+        return {"output_path": self.config.output_path}
 
     def run(self):
         if self.input_data_type != self.parser.input_type:
