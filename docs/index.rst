@@ -18,7 +18,7 @@ and visualization.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Data specification
+   :caption: Data Specification
 
    data/data_specification
 

@@ -1,6 +1,6 @@
 # 数据规格与格式说明
 
-本文说明 RL-Insight 当前支持的 **离线 profiling 数据** 的目录布局与 JSON 形态，便于采集与对接。
+本文说明 RL-Insight 当前支持各种数据规格的目录布局和数据要求，便于采集与对接。
 
 流水线在校验阶段会使用 `rl_insight.data.DataChecker` 注册的规则；规则类定义在 [`rl_insight/data/rules.py`](../../rl_insight/data/rules.py)（例如 `PathExistsRule` 等）。**具体校验项以代码为准**，部分规则可能尚未接入 `DataChecker.rules`，文档仅描述数据侧约定。
 
@@ -89,6 +89,40 @@
     "dur": 53.301,
     "ph": "X",
     "args": {}
-  }
+  },
+]
+```
+
+## 三、生成summary_event数据 格式示例
+
+```
+<summary-event-data-path>/
+└── summary_event_dataframe_sample.json
+```
+
+解析后汇总生成的数据文件 summary_event_dataframe_sample.json，内容必须包含"role", "name", "rank_id", "start_time_ms", "end_time_ms"字段，文件内容示例：
+
+```
+[
+  {
+    "name":"agent_loop_rollout_replica_0",
+    "role":"agent_loop_rollout_replica_0",
+    "domain":"default",
+    "start_time_ms":1773285888698.7263183594,
+    "end_time_ms":1773285890928.7919921875,
+    "duration_ms":2230.06575,
+    "rank_id":1,
+    "tid":3555733409
+  },
+  {
+    "name":"agent_loop_rollout_replica_0",
+    "role":"agent_loop_rollout_replica_0",
+    "domain":"default",
+    "start_time_ms":1773285888698.7546386719,
+    "end_time_ms":1773285890928.1730957031,
+    "duration_ms":2229.4185,
+    "rank_id":0,
+    "tid":3555714976
+  },
 ]
 ```
