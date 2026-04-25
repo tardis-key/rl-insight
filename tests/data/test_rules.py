@@ -17,9 +17,11 @@ from rl_insight.data.rules import (
     PathExistsRule,
     MstxJsonFileExistsRule,
     MstxJsonFieldValidRule,
+    TorchJsonFileExistsRule,
+    TorchJsonFieldValidRule,
 )
 from rl_insight.data.verl_log_rules import VerlLogExistRule, VerlLogKeyParamsRule
-from test_data_checker import MSTX_PROFILE_PATH
+from test_data_checker import MSTX_PROFILE_PATH, TORCH_PROFILE_PATH
 
 
 def test_path_exists_rule_accepts_existing_directory():
@@ -134,3 +136,23 @@ def test_verl_log_key_params_fails_when_missing_keyword(tmp_path):
     )
     assert rule.check(str(log)) is False
     assert "response_length/mean" in rule.error_message
+
+
+def test_torch_jsonfile_exists():
+    path_rule = PathExistsRule()
+    file_rule = TorchJsonFileExistsRule()
+    assert path_rule.check(str(TORCH_PROFILE_PATH)) is True
+    assert file_rule.check(str(TORCH_PROFILE_PATH)) is True
+
+
+def test_torch_jsonfile_exists_with_fake_path():
+    file_rule = TorchJsonFileExistsRule()
+    fake_path = "fake_path"
+    assert file_rule.check(fake_path) is False
+
+
+def test_torch_json_fields_valid():
+    path_rule = PathExistsRule()
+    filed_rule = TorchJsonFieldValidRule()
+    assert path_rule.check(str(TORCH_PROFILE_PATH)) is True
+    assert filed_rule.check(str(TORCH_PROFILE_PATH)) is True

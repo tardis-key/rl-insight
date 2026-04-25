@@ -24,6 +24,7 @@ from rl_insight.data.rules import DataValidationError
 CURRENT_FILE = Path(__file__).resolve()
 PROJECT_ROOT = CURRENT_FILE.parents[2]
 MSTX_PROFILE_PATH = PROJECT_ROOT / "data/mstx_data/mstx_profile"
+TORCH_PROFILE_PATH = PROJECT_ROOT / "data/torch_data/torch_profile"
 
 
 def test_data_checker_multi_json_path_exists():

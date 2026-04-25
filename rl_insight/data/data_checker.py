@@ -27,6 +27,8 @@ from .rules import (
     MstxJsonFieldValidRule,
     PathExistsRule,
     ValidationRule,
+    TorchJsonFileExistsRule,
+    TorchJsonFieldValidRule,
 )
 from .verl_log_rules import VerlLogExistRule, VerlLogKeyParamsRule
 
@@ -53,7 +55,11 @@ class DataChecker:
             MstxJsonFileExistsRule(),
             MstxJsonFieldValidRule(),
         ],
-        DataEnum.MULTI_JSON_TORCH: [],
+        DataEnum.MULTI_JSON_TORCH: [
+            PathExistsRule(),
+            TorchJsonFileExistsRule(),
+            TorchJsonFieldValidRule(),
+        ],
         DataEnum.VERL_LOG: [VerlLogExistRule(), VerlLogKeyParamsRule()],
         DataEnum.SUMMARY_EVENT: [
             ParserOutputValidatorRule(
