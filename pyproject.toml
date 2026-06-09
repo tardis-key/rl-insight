@@ -25,6 +25,7 @@ dependencies = [
   "opentelemetry-exporter-otlp-proto-http",
   "pyyaml",
   "ijson",
+  "requests",
 ]
 
 [project.scripts]
@@ -50,3 +51,9 @@ experimental = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "e2e: marks tests as end-to-end (requires external services)",
+]
+

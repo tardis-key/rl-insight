@@ -130,6 +130,10 @@ class MonitorHubActor:
             "events_applied": self._events_applied,
         }
 
+
+    def ping(self) -> str:
+        """Lightweight health check for latency probing (returns node IP)."""
+        return self._node_ip
     def _handle_counter(self, event: dict[str, Any]) -> None:
         """Increment a Prometheus counter from a ``counter`` event payload."""
         self._registry.count(
