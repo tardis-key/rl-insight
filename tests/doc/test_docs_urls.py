@@ -36,7 +36,7 @@ PROJECT_ROOT = CURRENT_FILE.parents[2]
 DOCS_FOLDER = PROJECT_ROOT / "docs"
 URL_PATTERN = re.compile(r"https?://[^\s)+\"'>]+")
 TIMEOUT = 5  # request timeout
-TEMPLATE_MARKERS = ("<", "${")
+TEMPLATE_MARKERS = ("<", "${", "{")
 TEXT_SUFFIXES = {".md", ".rst", ".txt", ".py"}
 
 
