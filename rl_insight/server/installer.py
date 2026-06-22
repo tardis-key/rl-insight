@@ -48,17 +48,34 @@ class ServiceInstaller:
         self._find_binary = find_binary
         self._find_grafana_homepath = find_grafana_homepath
 
-    def install(self, name: str) -> dict[str, Any]:
+    def resolve_release(self, name: str) -> dict[str, str]:
+        """Resolve release info for a service without downloading."""
+        return self._resolve_release(name)
+
+    def install(self, name: str, local_archive_dir: str | Path | None = None) -> dict[str, Any]:
         """Download, extract, and return manifest data for one service."""
         release = self._resolve_release(name)
+        local_archive_dir = Path(local_archive_dir).expanduser().resolve() if local_archive_dir else None
         package_dir = self.install_root / name / release["version"]
         archive_dir = self.install_root / "_downloads"
         archive_dir.mkdir(parents=True, exist_ok=True)
         package_dir.mkdir(parents=True, exist_ok=True)
 
         archive_path = archive_dir / release["asset"]
-        print(f"Downloading {name} {release['version']} from {release['url']}")
-        self._download_file(release["url"], archive_path)
+
+        # Check local archive directory first
+        if local_archive_dir and local_archive_dir.exists():
+            local_path = local_archive_dir / release["asset"]
+            if local_path.is_file():
+                shutil.copy2(local_path, archive_path)
+                print(f"Using local archive: {local_path}")
+            else:
+                print(f"Local archive not found ({local_path}), downloading...")
+                print(f"Downloading {name} {release['version']} from {release['url']}")
+                self._download_file(release["url"], archive_path)
+        else:
+            print(f"Downloading {name} {release['version']} from {release['url']}")
+            self._download_file(release["url"], archive_path)
         self._extract_archive(archive_path, package_dir)
 
         binary = self._find_binary(name, package_dir)

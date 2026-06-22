@@ -74,6 +74,13 @@ def _add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Download and reinstall enabled services even when binaries exist.",
     )
+    install.add_argument(
+        "--local-archive",
+        type=Path,
+        default=None,
+        help="Directory with pre-downloaded .tar.gz archives; skip download when archive matches.",
+    )
+
     install.set_defaults(func=commands.install)
 
     start = server_subparsers.add_parser(

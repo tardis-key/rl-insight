@@ -57,9 +57,12 @@ class ServerServiceManager:
         return self.dependencies.missing(statuses)
 
     def install_missing_dependencies(
-        self, *, force: bool = False
+        self, *, force: bool = False, local_archive_dir: str | Path | None = None
     ) -> list[ServiceStatus]:
-        return self.dependencies.install_missing(force=force)
+        return self.dependencies.install_missing(force=force, local_archive_dir=local_archive_dir)
+
+    def plan_install(self, *, targets: list[str]) -> list[dict[str, Any]]:
+        return self.dependencies.plan_install(targets=targets)
 
     def active_state(self) -> dict[str, Any] | None:
         return self.runtime.active_state()
