@@ -89,7 +89,7 @@ class ServiceInstaller:
             return {
                 "version": version,
                 "asset": asset,
-                "url": f"https://dl.grafana.com/oss/release/{asset}",
+                "url": self._build_download_url(name, version, os_token, arch_token),
             }
 
         spec = SPECS[name]
@@ -110,8 +110,23 @@ class ServiceInstaller:
         return {
             "version": version,
             "asset": asset,
-            "url": f"https://github.com/{spec.github_repo}/releases/download/{tag}/{asset}",
+            "url": self._build_download_url(name, version, os_token, arch_token),
         }
+
+    def _build_download_url(self, name: str, version: str, os_token: str, arch_token: str) -> str:
+        """Build the download URL from the configured template or built-in defaults."""
+        template = _select_str(self.conf, f"{name}.download_url_template")
+        if not template:
+            if name == "grafana":
+                template = "https://dl.grafana.com/oss/release/grafana-{version}.{os}-{arch}.tar.gz"
+            elif name == "prometheus":
+                template = "https://github.com/prometheus/prometheus/releases/download/v{version}/prometheus-{version}.{os}-{arch}.tar.gz"
+            elif name == "tempo":
+                template = "https://github.com/grafana/tempo/releases/download/v{version}/tempo_{version}_{os}_{arch}.tar.gz"
+            else:
+                raise RuntimeError(f"No download source configured for {name}")
+        return template.format(version=version, os=os_token, arch=arch_token)
+
 
     def _github_latest_release(self, repo: str) -> dict[str, Any]:
         try:
