@@ -59,6 +59,8 @@ Templates support three variables: `{version}` (bare version number), `{os}` (al
 
 ### GitHub proxy (covers Prometheus and Tempo)
 
+gh-proxy can accelerate GitHub-hosted archives. Grafana is served from `dl.grafana.com` (not GitHub), so this approach only applies to Prometheus and Tempo.
+
 ```yaml
 prometheus:
   download_url_template: "https://gh-proxy.com/https://github.com/prometheus/prometheus/releases/download/v{version}/prometheus-{version}.{os}-{arch}.tar.gz"
@@ -67,14 +69,13 @@ tempo:
   download_url_template: "https://gh-proxy.com/https://github.com/grafana/tempo/releases/download/v{version}/tempo_{version}_{os}_{arch}.tar.gz"
 ```
 
-### TUNA mirror (Tsinghua University)
+### TUNA mirror (Tsinghua University — Prometheus only)
+
+TUNA mirrors Prometheus release archives via its `github-release` path. Grafana release tarballs are **not** currently mirrored by TUNA or other major Chinese mirror sites, so keep the default `dl.grafana.com` URL for Grafana.
 
 ```yaml
 prometheus:
   download_url_template: "https://mirrors.tuna.tsinghua.edu.cn/github-release/prometheus/prometheus/{version}/prometheus-{version}.{os}-{arch}.tar.gz"
-
-grafana:
-  download_url_template: "https://mirrors.tuna.tsinghua.edu.cn/grafana/oss/release/grafana-{version}.{os}-{arch}.tar.gz"
 ```
 
 Edit the bundled `config/config.yaml` directly, or save the overrides in a separate file and pass it via `--config`:
@@ -143,29 +144,31 @@ Follow Approach 3 to identify and download the three `.tar.gz` files.
 The default managed directory is `~/.rl-insight/services`. All three services extract the same way: `tar -xzf` into a temp directory, then copy the output into place.
 
 ```bash
-PROMETHEUS_ARCHIVE=prometheus-2.54.1.linux-amd64.tar.gz
-TEMPO_ARCHIVE=tempo_2.6.1_linux_amd64.tar.gz
-GRAFANA_ARCHIVE=grafana-13.0.0.linux-amd64.tar.gz
+PROMETHEUS_ARCHIVE=prometheus-2.54.1.linux-arm64.tar.gz
+TEMPO_ARCHIVE=tempo_2.6.1_linux_arm64.tar.gz
+GRAFANA_ARCHIVE=grafana-13.0.0.linux-arm64.tar.gz
 
-# Prometheus
+# Prometheus — extracted directory name matches the archive (minus .tar.gz)
+PROMETHEUS_DIR="${PROMETHEUS_ARCHIVE%.tar.gz}"
 TMP_DIR="$(mktemp -d)"
 tar -xzf "$PROMETHEUS_ARCHIVE" -C "$TMP_DIR"
 mkdir -p ~/.rl-insight/services/prometheus
-cp "$TMP_DIR/prometheus-2.54.1.linux-amd64/prometheus" ~/.rl-insight/services/prometheus/prometheus
+cp "$TMP_DIR/$PROMETHEUS_DIR/prometheus" ~/.rl-insight/services/prometheus/prometheus
 chmod +x ~/.rl-insight/services/prometheus/prometheus
 
-# Tempo
+# Tempo — extracts a flat binary, no directory
 TMP_DIR="$(mktemp -d)"
 tar -xzf "$TEMPO_ARCHIVE" -C "$TMP_DIR"
 mkdir -p ~/.rl-insight/services/tempo
 cp "$TMP_DIR/tempo" ~/.rl-insight/services/tempo/tempo
 chmod +x ~/.rl-insight/services/tempo/tempo
 
-# Grafana (copy entire tree — includes conf/ and public/)
+# Grafana — directory name drops the arch suffix; read it from the tarball
+GRAFANA_DIR=$(tar -tzf "$GRAFANA_ARCHIVE" | head -1 | cut -d/ -f1)
 TMP_DIR="$(mktemp -d)"
 tar -xzf "$GRAFANA_ARCHIVE" -C "$TMP_DIR"
 mkdir -p ~/.rl-insight/services/grafana
-cp -a "$TMP_DIR/grafana-v13.0.0" ~/.rl-insight/services/grafana/grafana-v13.0.0
+cp -a "$TMP_DIR/$GRAFANA_DIR" ~/.rl-insight/services/grafana/$GRAFANA_DIR
 ```
 
 ### 3. Verify and start
@@ -173,7 +176,7 @@ cp -a "$TMP_DIR/grafana-v13.0.0" ~/.rl-insight/services/grafana/grafana-v13.0.0
 ```bash
 ~/.rl-insight/services/prometheus/prometheus --version
 ~/.rl-insight/services/tempo/tempo --version
-~/.rl-insight/services/grafana/grafana-v13.0.0/bin/grafana --version
+~/.rl-insight/services/grafana/$GRAFANA_DIR/bin/grafana --version
 
 rl-insight server start
 ```
