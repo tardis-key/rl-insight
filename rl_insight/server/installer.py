@@ -128,13 +128,14 @@ class ServiceInstaller:
         return template.format(version=version, os=os_token, arch=arch_token)
 
 
-    def _github_latest_release(self, repo: str) -> dict[str, Any]:
+    @staticmethod
+    def _github_latest_release(repo: str) -> dict[str, Any]:
         try:
-            return self._read_json(
+            return ServiceInstaller._read_json(
                 f"https://api.github.com/repos/{repo}/releases/latest"
             )
         except RuntimeError:
-            return {"tag_name": self._github_latest_tag_from_redirect(repo)}
+            return {"tag_name": ServiceInstaller._github_latest_tag_from_redirect(repo)}
 
     @staticmethod
     def _github_latest_tag_from_redirect(repo: str) -> str:
@@ -154,8 +155,9 @@ class ServiceInstaller:
             raise RuntimeError(f"Failed to resolve latest release tag for {repo}")
         return tag
 
-    def _latest_grafana_version(self) -> str:
-        data = self._read_json("https://grafana.com/api/grafana/versions")
+    @staticmethod
+    def _latest_grafana_version() -> str:
+        data = ServiceInstaller._read_json("https://grafana.com/api/grafana/versions")
         for item in data.get("items", []):
             channels = item.get("channels") or {}
             if channels.get("stable"):
@@ -185,10 +187,11 @@ class ServiceInstaller:
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Failed to download {url}: {exc.reason}") from exc
 
-    def _extract_archive(self, archive_path: Path, target_dir: Path) -> None:
+    @staticmethod
+    def _extract_archive(archive_path: Path, target_dir: Path) -> None:
         with tarfile.open(archive_path) as archive:
-            self._safe_extract_tar(archive, target_dir)
-        self._mark_executables(target_dir)
+            ServiceInstaller._safe_extract_tar(archive, target_dir)
+        ServiceInstaller._mark_executables(target_dir)
 
     @staticmethod
     def _safe_extract_tar(archive: tarfile.TarFile, target_dir: Path) -> None:
