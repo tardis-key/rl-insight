@@ -52,10 +52,19 @@ class ServiceInstaller:
         """Resolve release info for a service without downloading."""
         return self._resolve_release(name)
 
-    def install(self, name: str, local_archive_dir: str | Path | None = None, release: dict[str, str] | None = None) -> dict[str, Any]:
+    def install(
+        self,
+        name: str,
+        local_archive_dir: str | Path | None = None,
+        release: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """Download, extract, and return manifest data for one service."""
         release = release or self._resolve_release(name)
-        local_archive_dir = Path(local_archive_dir).expanduser().resolve() if local_archive_dir else None
+        local_archive_dir = (
+            Path(local_archive_dir).expanduser().resolve()
+            if local_archive_dir
+            else None
+        )
         package_dir = self.install_root / name / release["version"]
         archive_dir = self.install_root / "_downloads"
         archive_dir.mkdir(parents=True, exist_ok=True)
@@ -66,7 +75,9 @@ class ServiceInstaller:
         # Check local archive directory first
         if local_archive_dir:
             if not local_archive_dir.is_dir():
-                print(f"--local-archive is not a directory ({local_archive_dir}), downloading...")
+                print(
+                    f"--local-archive is not a directory ({local_archive_dir}), downloading..."
+                )
                 print(f"Downloading {name} {release['version']} from {release['url']}")
                 self._download_file(release["url"], archive_path)
             else:
@@ -76,7 +87,9 @@ class ServiceInstaller:
                     print(f"Using local archive: {local_path}")
                 else:
                     print(f"Local archive not found ({local_path}), downloading...")
-                    print(f"Downloading {name} {release['version']} from {release['url']}")
+                    print(
+                        f"Downloading {name} {release['version']} from {release['url']}"
+                    )
                     self._download_file(release["url"], archive_path)
         else:
             print(f"Downloading {name} {release['version']} from {release['url']}")
@@ -135,7 +148,9 @@ class ServiceInstaller:
             "url": self._build_download_url(name, version, os_token, arch_token),
         }
 
-    def _build_download_url(self, name: str, version: str, os_token: str, arch_token: str) -> str:
+    def _build_download_url(
+        self, name: str, version: str, os_token: str, arch_token: str
+    ) -> str:
         """Build the download URL from the configured template or built-in defaults."""
         template = _select_str(self.conf, f"{name}.download_url_template")
         if not template:
@@ -148,7 +163,6 @@ class ServiceInstaller:
             else:
                 raise RuntimeError(f"No download source configured for {name}")
         return template.format(version=version, os=os_token, arch=arch_token)
-
 
     @staticmethod
     def _github_latest_release(repo: str) -> dict[str, Any]:
