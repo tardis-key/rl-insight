@@ -73,25 +73,21 @@ class ServiceInstaller:
         archive_path = archive_dir / release["asset"]
 
         # Check local archive directory first
+        use_local = False
         if local_archive_dir:
             if not local_archive_dir.is_dir():
                 print(
                     f"--local-archive is not a directory ({local_archive_dir}), downloading..."
                 )
-                print(f"Downloading {name} {release['version']} from {release['url']}")
-                self._download_file(release["url"], archive_path)
             else:
                 local_path = local_archive_dir / release["asset"]
                 if local_path.is_file():
                     shutil.copy2(local_path, archive_path)
                     print(f"Using local archive: {local_path}")
+                    use_local = True
                 else:
                     print(f"Local archive not found ({local_path}), downloading...")
-                    print(
-                        f"Downloading {name} {release['version']} from {release['url']}"
-                    )
-                    self._download_file(release["url"], archive_path)
-        else:
+        if not use_local:
             print(f"Downloading {name} {release['version']} from {release['url']}")
             self._download_file(release["url"], archive_path)
         self._extract_archive(archive_path, package_dir)
