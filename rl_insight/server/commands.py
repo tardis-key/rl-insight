@@ -79,7 +79,7 @@ class ServerCommands:
             print()
 
         try:
-            statuses = manager.install_missing_dependencies(force=args.force, local_archive_dir=local_archive_dir)
+            statuses = manager.install_missing_dependencies(force=args.force, local_archive_dir=local_archive_dir, planned_releases=planned)
         except RuntimeError as exc:
             print(f"Install failed: {exc}", file=sys.stderr)
             return 1

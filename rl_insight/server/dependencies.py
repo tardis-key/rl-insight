@@ -135,10 +135,10 @@ class DependencyManager:
         plans: list[dict[str, Any]] = []
         for name in targets:
             info = installer.resolve_release(name)
-            plans.append({"name": name, "version": info["version"], "url": info["url"]})
+            plans.append({"name": name, **info})
         return plans
 
-    def install_missing(self, *, force: bool = False, local_archive_dir: str | Path | None = None) -> list[ServiceStatus]:
+    def install_missing(self, *, force: bool = False, local_archive_dir: str | Path | None = None, planned_releases: list[dict[str, Any]] | None = None) -> list[ServiceStatus]:
         """Download and install enabled services that are missing locally."""
         self.install_root.mkdir(parents=True, exist_ok=True)
         before = self.check(include_versions=True)
@@ -150,6 +150,7 @@ class DependencyManager:
         if not targets:
             return self.check()
 
+        releases_by_name = {r["name"]: r for r in (planned_releases or [])}
         manifest = self._read_manifest()
         installer = ServiceInstaller(
             self.conf,
@@ -158,7 +159,7 @@ class DependencyManager:
             find_grafana_homepath=self.find_grafana_homepath,
         )
         for name in targets:
-            info = installer.install(name, local_archive_dir=local_archive_dir)
+            info = installer.install(name, local_archive_dir=local_archive_dir, release=releases_by_name.get(name))
             manifest.setdefault("services", {})[name] = info
             self._write_manifest(manifest)
 

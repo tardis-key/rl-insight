@@ -52,9 +52,9 @@ class ServiceInstaller:
         """Resolve release info for a service without downloading."""
         return self._resolve_release(name)
 
-    def install(self, name: str, local_archive_dir: str | Path | None = None) -> dict[str, Any]:
+    def install(self, name: str, local_archive_dir: str | Path | None = None, release: dict[str, str] | None = None) -> dict[str, Any]:
         """Download, extract, and return manifest data for one service."""
-        release = self._resolve_release(name)
+        release = release or self._resolve_release(name)
         local_archive_dir = Path(local_archive_dir).expanduser().resolve() if local_archive_dir else None
         package_dir = self.install_root / name / release["version"]
         archive_dir = self.install_root / "_downloads"
