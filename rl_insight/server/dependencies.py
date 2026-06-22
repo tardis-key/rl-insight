@@ -185,7 +185,7 @@ class DependencyManager:
             ]
 
         service_info = manifest.get("services", {}).get(name, {})
-        manifest_path = service_info.get("binary")
+        manifest_path = service_info.get("binary_path")
         if manifest_path:
             add(Path(str(manifest_path)), "managed")
 

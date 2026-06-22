@@ -74,7 +74,7 @@ class ServiceInstaller:
 
         return {
             "version": release["version"],
-            "binary": str(binary.resolve()),
+            "binary_path": str(binary.resolve()),
             "homepath": homepath,
             "installed_at": _dt.datetime.now(tz=_dt.timezone.utc).isoformat(),
             "source_url": release["url"],
