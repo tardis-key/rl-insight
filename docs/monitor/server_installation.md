@@ -3,12 +3,12 @@
 RL-Insight Monitor needs three Linux services before online monitoring can run:
 
 | Service | Role | Required version | Installer version |
-|---|---:|---:|
+|---|---|---|---|
 | Prometheus | stores and queries training metrics | `>= 2.30.0` | `2.54.1` |
 | Tempo | stores and queries RL state traces | `>= 2.0.0` | `2.6.1` |
 | Grafana | shows dashboards and trace views | `>= 13.0.0` | `13.0.0` |
 
-Choose one of the four approaches below depending on your network environment.
+Choose one of the three approaches below depending on your network environment.
 
 ## Supported Linux Platforms
 
@@ -21,9 +21,11 @@ Automatic and manual installation are Linux-only.
 
 Windows and macOS can run the training-side Python APIs, but RL-Insight does not manage local Prometheus, Tempo, or Grafana services there yet.
 
-## Approach 1: Direct Installation
+---
 
-From the Python environment where `rl-insight` is installed:
+## Approach 1: Direct Installation (Official Source)
+
+Suitable for users whose nodes can reach GitHub release assets and `dl.grafana.com` directly. The installer downloads and manages everything.
 
 ```bash
 rl-insight server install
@@ -51,9 +53,11 @@ rl-insight server start --detach
 rl-insight server stop
 ```
 
+---
+
 ## Approach 2: Offline Installation With Pre-downloaded Archives
 
-When the target node has no network access at all, pre-download the archives on another machine.
+Suitable for nodes that cannot access official sources or have no internet connection at all. Pre-download the archives on another machine and provide them locally.
 
 ### 1. Get the download list
 
@@ -68,7 +72,7 @@ Planned downloads:
 
 ### 2. Download the archives
 
-Use a machine with network access to download the files listed above. The filenames must match exactly. If the download is too slow, refer to the mirror configurations in Approach 2 to accelerate it.
+Use a machine with network access to download the files listed above. The filenames must match exactly.
 
 ### 3. Install from the local directory
 
@@ -80,9 +84,11 @@ rl-insight server install --local-archive /path/to/archives
 
 RL-Insight checks the local directory for each archive by exact filename. Archives that match are copied and used directly; any missing archive falls back to the configured download URL. The version is verified implicitly — the archive filename must include the version configured in `install_version`.
 
+---
+
 ## Approach 3: Manual Installation (No Installer)
 
-Use this path when you want full control over binary placement, or when binaries are already installed in common directories (e.g. `/usr/bin`, `/usr/local/bin`) and you just want `rl-insight server start` to discover them.
+Suitable for air-gapped environments, centralized operations with unified deployment tooling, or users who need full control over binary placement and custom deployment requirements.
 
 RL-Insight searches for binaries in this order: manifest.json → `~/.rl-insight/services` → system PATH → system fixed paths. If your binaries are already on `PATH` or in a standard location, simply run `rl-insight server start`. To point at an arbitrary path, use `binary_path` in config:
 
@@ -97,7 +103,7 @@ grafana:
 
 ### 1. Get the archives
 
-Follow Approach 3 to identify and download the three `.tar.gz` files.
+Follow Approach 2 to identify and download the three `.tar.gz` files.
 
 ### 2. Extract and place
 
@@ -140,6 +146,8 @@ cp -a "$TMP_DIR/$GRAFANA_DIR" ~/.rl-insight/services/grafana/$GRAFANA_DIR
 
 rl-insight server start
 ```
+
+---
 
 ## Data Persistence
 
