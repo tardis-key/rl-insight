@@ -51,47 +51,7 @@ rl-insight server start --detach
 rl-insight server stop
 ```
 
-## Approach 2: Use A Mirror When Downloads Are Too Slow
-
-If `rl-insight server install` is too slow because the node cannot reach GitHub release assets or `dl.grafana.com`, switch to a mirror by configuring `download_url_template` per service.
-
-Templates support three variables: `{version}` (bare version number), `{os}` (always `linux`), and `{arch}` (`amd64` or `arm64`).
-
-### GitHub proxy (covers Prometheus and Tempo)
-
-gh-proxy can accelerate GitHub-hosted archives. Grafana is served from `dl.grafana.com` (not GitHub), so this approach only applies to Prometheus and Tempo.
-
-```yaml
-prometheus:
-  download_url_template: "https://gh-proxy.com/https://github.com/prometheus/prometheus/releases/download/v{version}/prometheus-{version}.{os}-{arch}.tar.gz"
-
-tempo:
-  download_url_template: "https://gh-proxy.com/https://github.com/grafana/tempo/releases/download/v{version}/tempo_{version}_{os}_{arch}.tar.gz"
-```
-
-### TUNA mirror (Tsinghua University — Prometheus only)
-
-TUNA mirrors Prometheus release archives via its `github-release` path. Grafana release tarballs are **not** currently mirrored by TUNA or other major Chinese mirror sites, so keep the default `dl.grafana.com` URL for Grafana.
-
-```yaml
-prometheus:
-  download_url_template: "https://mirrors.tuna.tsinghua.edu.cn/github-release/prometheus/prometheus/{version}/prometheus-{version}.{os}-{arch}.tar.gz"
-```
-
-Edit the bundled `config/config.yaml` directly, or save the overrides in a separate file and pass it via `--config`:
-
-```bash
-# Option A: edit the bundled config in-place, then reinstall.
-vim rl_insight/config/config.yaml   # update download_url_template fields
-rl-insight server install
-
-# Option B: keep a separate config file.
-rl-insight server install --config /path/to/custom-config.yaml
-```
-
-Services without a custom template continue to use the built-in default URLs.
-
-## Approach 3: Offline Installation With Pre-downloaded Archives
+## Approach 2: Offline Installation With Pre-downloaded Archives
 
 When the target node has no network access at all, pre-download the archives on another machine.
 
@@ -120,7 +80,7 @@ rl-insight server install --local-archive /path/to/archives
 
 RL-Insight checks the local directory for each archive by exact filename. Archives that match are copied and used directly; any missing archive falls back to the configured download URL. The version is verified implicitly — the archive filename must include the version configured in `install_version`.
 
-## Approach 4: Manual Installation (No Installer)
+## Approach 3: Manual Installation (No Installer)
 
 Use this path when you want full control over binary placement, or when binaries are already installed in common directories (e.g. `/usr/bin`, `/usr/local/bin`) and you just want `rl-insight server start` to discover them.
 
