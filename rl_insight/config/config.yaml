@@ -13,7 +13,6 @@ server:
 
 prometheus:
   binary_path: ""
-  download_url_template: "https://github.com/prometheus/prometheus/releases/download/v{version}/prometheus-{version}.{os}-{arch}.tar.gz"
   enable: true
   min_version: 2.30.0
   install_version: 2.54.1
@@ -26,7 +25,6 @@ otel:
 
 tempo:
   binary_path: ""
-  download_url_template: "https://github.com/grafana/tempo/releases/download/v{version}/tempo_{version}_{os}_{arch}.tar.gz"
   enable: true
   min_version: 2.0.0
   install_version: 2.6.1
@@ -36,7 +34,6 @@ tempo:
 
 grafana:
   binary_path: ""
-  download_url_template: "https://dl.grafana.com/oss/release/grafana-{version}.{os}-{arch}.tar.gz"
   enable: true
   min_version: 13.0.0
   install_version: 13.0.0
