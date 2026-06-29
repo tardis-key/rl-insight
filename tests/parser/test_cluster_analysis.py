@@ -672,25 +672,12 @@ class TestRLTimelineVisualizerRun:
     """Tests for RLTimelineVisualizer.run vis_type dispatch."""
 
     def test_run_html_delegates_to_generate_rl_timeline(self, sample_event_dataframe):
-        viz = _timeline_viz(output_path="/tmp/out", vis_type="html")
+        viz = _timeline_viz(output_path="/tmp/out")
         with patch.object(
             RLTimelineVisualizer, "generate_rl_timeline", return_value=MagicMock()
         ) as mock_gen:
             viz.run(sample_event_dataframe)
             mock_gen.assert_called_once_with(sample_event_dataframe)
-
-    def test_run_chart_logs(self, sample_event_dataframe):
-        viz = _timeline_viz(vis_type="chart")
-        with patch(
-            "rl_insight.visualizer.timeline_visualizer.logger.info"
-        ) as mock_info:
-            viz.run(sample_event_dataframe)
-        mock_info.assert_called()
-
-    def test_run_unsupported_vis_type_raises(self, sample_event_dataframe):
-        viz = _timeline_viz(vis_type="unknown")
-        with pytest.raises(ValueError, match="Unsupported vis_type"):
-            viz.run(sample_event_dataframe)
 
 
 # =============================================================================
