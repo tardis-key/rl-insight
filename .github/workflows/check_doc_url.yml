@@ -1,0 +1,32 @@
+name: check documentation urls
+
+# 触发时机：每次 PR 创建/更新、每次推送到主分支
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, edited, synchronize]
+
+# 任务
+jobs:
+  check-doc-urls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pytest
+
+      - name: Run doc URL validation test
+        run: pytest tests/doc/test_docs_urls.py -v
