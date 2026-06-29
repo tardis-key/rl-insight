@@ -3,12 +3,12 @@
 RL-Insight Monitor needs three Linux services before online monitoring can run:
 
 | Service | Role | Required version | Installer version |
-|---|---|---:|---:|
+|---|---|---|---|
 | Prometheus | stores and queries training metrics | `>= 2.30.0` | `2.54.1` |
 | Tempo | stores and queries RL state traces | `>= 2.0.0` | `2.6.1` |
 | Grafana | shows dashboards and trace views | `>= 13.0.0` | `13.0.0` |
 
-The recommended path is `rl-insight server install`. If the installer cannot download release assets because of network restrictions, use the manual commands below and then run `rl-insight server start`.
+Choose one of the three approaches below depending on your network environment.
 
 ## Supported Linux Platforms
 
@@ -21,19 +21,17 @@ Automatic and manual installation are Linux-only.
 
 Windows and macOS can run the training-side Python APIs, but RL-Insight does not manage local Prometheus, Tempo, or Grafana services there yet.
 
-## Option 1: RL-Insight Installer
+---
 
-From the Python environment where `rl-insight` is installed:
+## Approach 1: Direct Installation (Official Source)
+
+Suitable for users whose nodes can reach GitHub release assets and `dl.grafana.com` directly. The installer downloads and manages everything.
 
 ```bash
 rl-insight server install
 ```
 
-The command downloads Prometheus, Tempo, and Grafana into:
-
-```text
-~/.rl-insight/services
-```
+The command downloads Prometheus, Tempo, and Grafana into `~/.rl-insight/services`, then prints a dependency summary.
 
 Then start the stack:
 
@@ -55,143 +53,101 @@ rl-insight server start --detach
 rl-insight server stop
 ```
 
-## Option 2: Manual Managed Install
+---
 
-Use this path when `rl-insight server install` fails because the node cannot reach GitHub release assets or `dl.grafana.com`.
+## Approach 2: Offline Installation With Pre-downloaded Archives
 
-RL-Insight automatically searches the default managed directory, so installing the binaries under `~/.rl-insight/services` is enough for `rl-insight server start`.
+Suitable for nodes that cannot access official sources or have no internet connection at all. Pre-download the archives on another machine and provide them locally.
 
-### 1. Prepare Paths And Architecture
+### 1. Get the download list
 
-```bash
-export RL_INSIGHT_SERVICES="$HOME/.rl-insight/services"
-mkdir -p "$RL_INSIGHT_SERVICES"
+Run `rl-insight server install` on the target node. Even if it cannot download, it prints the planned URLs before attempting:
 
-case "$(uname -m)" in
-  x86_64|amd64) ARCH=amd64 ;;
-  aarch64|arm64) ARCH=arm64 ;;
-  *) echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
-esac
+```text
+Planned downloads:
+  prometheus   2.54.1    https://github.com/prometheus/prometheus/releases/download/v2.54.1/prometheus-2.54.1.linux-amd64.tar.gz
+  tempo        2.6.1     https://github.com/grafana/tempo/releases/download/v2.6.1/tempo_2.6.1_linux_amd64.tar.gz
+  grafana      13.0.0    https://dl.grafana.com/oss/release/grafana-13.0.0.linux-amd64.tar.gz
 ```
 
-### 2. Install Prometheus
+### 2. Download the archives
+
+Use a machine with network access to download the files listed above. The filenames must match exactly.
+
+### 3. Install from the local directory
+
+Place the three `.tar.gz` files in a single directory and run:
 
 ```bash
-PROMETHEUS_VERSION=2.54.1
+rl-insight server install --local-archive /path/to/archives
+```
+
+RL-Insight checks the local directory for each archive by exact filename. Archives that match are copied and used directly; any missing archive falls back to the configured download URL. The version is verified implicitly — the archive filename must include the version configured in `install_version`.
+
+---
+
+## Approach 3: Manual Installation (No Installer)
+
+Suitable for air-gapped environments, centralized operations with unified deployment tooling, or users who need full control over binary placement and custom deployment requirements.
+
+RL-Insight searches for binaries in this order: manifest.json → `~/.rl-insight/services` → system PATH → system fixed paths. If your binaries are already on `PATH` or in a standard location, simply run `rl-insight server start`. To point at an arbitrary path, use `binary_path` in config:
+
+```yaml
+prometheus:
+  binary_path: /opt/custom/prometheus
+tempo:
+  binary_path: /opt/custom/tempo
+grafana:
+  binary_path: /opt/custom/grafana-server
+```
+
+### 1. Get the archives
+
+Follow Approach 2 to identify and download the three `.tar.gz` files.
+
+### 2. Extract and place
+
+The default managed directory is `~/.rl-insight/services`. All three services extract the same way: `tar -xzf` into a temp directory, then copy the output into place.
+
+```bash
+PROMETHEUS_ARCHIVE=prometheus-2.54.1.linux-arm64.tar.gz
+TEMPO_ARCHIVE=tempo_2.6.1_linux_arm64.tar.gz
+GRAFANA_ARCHIVE=grafana-13.0.0.linux-arm64.tar.gz
+
+# Prometheus — extracted directory name matches the archive (minus .tar.gz)
+PROMETHEUS_DIR="${PROMETHEUS_ARCHIVE%.tar.gz}"
 TMP_DIR="$(mktemp -d)"
+tar -xzf "$PROMETHEUS_ARCHIVE" -C "$TMP_DIR"
+mkdir -p ~/.rl-insight/services/prometheus
+cp "$TMP_DIR/$PROMETHEUS_DIR/prometheus" ~/.rl-insight/services/prometheus/prometheus
+chmod +x ~/.rl-insight/services/prometheus/prometheus
 
-curl -fL \
-  -o "$TMP_DIR/prometheus.tar.gz" \
-  "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-${ARCH}.tar.gz"
-
-tar -xzf "$TMP_DIR/prometheus.tar.gz" -C "$TMP_DIR"
-mkdir -p "$RL_INSIGHT_SERVICES/prometheus"
-cp "$TMP_DIR/prometheus-${PROMETHEUS_VERSION}.linux-${ARCH}/prometheus" \
-  "$RL_INSIGHT_SERVICES/prometheus/prometheus"
-chmod +x "$RL_INSIGHT_SERVICES/prometheus/prometheus"
-
-"$RL_INSIGHT_SERVICES/prometheus/prometheus" --version
-```
-
-### 3. Install Tempo
-
-```bash
-TEMPO_VERSION=2.6.1
+# Tempo — extracts a flat binary, no directory
 TMP_DIR="$(mktemp -d)"
+tar -xzf "$TEMPO_ARCHIVE" -C "$TMP_DIR"
+mkdir -p ~/.rl-insight/services/tempo
+cp "$TMP_DIR/tempo" ~/.rl-insight/services/tempo/tempo
+chmod +x ~/.rl-insight/services/tempo/tempo
 
-curl -fL \
-  -o "$TMP_DIR/tempo.tar.gz" \
-  "https://github.com/grafana/tempo/releases/download/v${TEMPO_VERSION}/tempo_${TEMPO_VERSION}_linux_${ARCH}.tar.gz"
-
-tar -xzf "$TMP_DIR/tempo.tar.gz" -C "$TMP_DIR"
-mkdir -p "$RL_INSIGHT_SERVICES/tempo"
-cp "$TMP_DIR/tempo" "$RL_INSIGHT_SERVICES/tempo/tempo"
-chmod +x "$RL_INSIGHT_SERVICES/tempo/tempo"
-
-"$RL_INSIGHT_SERVICES/tempo/tempo" --version
-```
-
-### 4. Install Grafana
-
-```bash
-GRAFANA_VERSION=13.0.0
+# Grafana — directory name drops the arch suffix; read it from the tarball
+GRAFANA_DIR=$(tar -tzf "$GRAFANA_ARCHIVE" | head -1 | cut -d/ -f1)
 TMP_DIR="$(mktemp -d)"
-
-curl -fL \
-  -o "$TMP_DIR/grafana.tar.gz" \
-  "https://dl.grafana.com/oss/release/grafana-${GRAFANA_VERSION}.linux-${ARCH}.tar.gz"
-
-tar -xzf "$TMP_DIR/grafana.tar.gz" -C "$TMP_DIR"
-mkdir -p "$RL_INSIGHT_SERVICES/grafana"
-cp -a "$TMP_DIR/grafana-v${GRAFANA_VERSION}" \
-  "$RL_INSIGHT_SERVICES/grafana/grafana-v${GRAFANA_VERSION}"
-
-"$RL_INSIGHT_SERVICES/grafana/grafana-v${GRAFANA_VERSION}/bin/grafana-server" --version
+tar -xzf "$GRAFANA_ARCHIVE" -C "$TMP_DIR"
+mkdir -p ~/.rl-insight/services/grafana
+cp -a "$TMP_DIR/$GRAFANA_DIR" ~/.rl-insight/services/grafana/$GRAFANA_DIR
 ```
 
-### 5. Verify RL-Insight Can Find The Services
+### 3. Verify and start
 
 ```bash
+~/.rl-insight/services/prometheus/prometheus --version
+~/.rl-insight/services/tempo/tempo --version
+~/.rl-insight/services/grafana/$GRAFANA_DIR/bin/grafana --version
+
 rl-insight server start
 ```
 
-If the services start successfully, Grafana, Prometheus, Tempo, and the OTLP trace endpoint are printed in the terminal.
-
-## Installing From An Internal Mirror Or Local Files
-
-If compute nodes cannot access the public URLs, download the three archives from another machine or mirror them internally:
-
-```text
-prometheus-2.54.1.linux-amd64.tar.gz
-prometheus-2.54.1.linux-arm64.tar.gz
-tempo_2.6.1_linux_amd64.tar.gz
-tempo_2.6.1_linux_arm64.tar.gz
-grafana-13.0.0.linux-amd64.tar.gz
-grafana-13.0.0.linux-arm64.tar.gz
-```
-
-Then replace the `curl` lines above with local archive paths. For example:
-
-```bash
-PROMETHEUS_ARCHIVE=/path/to/prometheus-2.54.1.linux-${ARCH}.tar.gz
-TMP_DIR="$(mktemp -d)"
-tar -xzf "$PROMETHEUS_ARCHIVE" -C "$TMP_DIR"
-mkdir -p "$RL_INSIGHT_SERVICES/prometheus"
-cp "$TMP_DIR/prometheus-2.54.1.linux-${ARCH}/prometheus" \
-  "$RL_INSIGHT_SERVICES/prometheus/prometheus"
-chmod +x "$RL_INSIGHT_SERVICES/prometheus/prometheus"
-```
-
-Use the same pattern for Tempo and Grafana.
-
-## System Package Install
-
-Company-managed environments may prefer system packages. This is supported when the versions meet the table above and the binaries are available on `PATH` or in common Linux locations such as `/usr/bin`, `/usr/local/bin`, `/usr/sbin`, or `/usr/share/grafana/bin`.
-
-Check versions after installation:
-
-```bash
-prometheus --version
-tempo --version
-grafana-server --version
-```
-
-Ubuntu / Debian example:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y prometheus
-```
-
-CentOS / RHEL family example:
-
-```bash
-sudo yum install -y prometheus
-# or, on newer distributions:
-sudo dnf install -y prometheus
-```
-
-Grafana is usually installed from Grafana's official APT/RPM repository. Tempo is commonly installed from a Grafana package repository or release archive.
+---
 
 ## Data Persistence
 
@@ -224,4 +180,3 @@ server:
 ## Next Step
 
 Continue with [Quick Start](./quick_start.md) to start the stack, instrument training code, and open Grafana.
-

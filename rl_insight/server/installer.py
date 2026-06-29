@@ -48,17 +48,48 @@ class ServiceInstaller:
         self._find_binary = find_binary
         self._find_grafana_homepath = find_grafana_homepath
 
-    def install(self, name: str) -> dict[str, Any]:
+    def resolve_release(self, name: str) -> dict[str, str]:
+        """Resolve release info for a service without downloading."""
+        return self._resolve_release(name)
+
+    def install(
+        self,
+        name: str,
+        local_archive_dir: str | Path | None = None,
+        release: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """Download, extract, and return manifest data for one service."""
-        release = self._resolve_release(name)
+        release = release or self._resolve_release(name)
+        local_archive_dir = (
+            Path(local_archive_dir).expanduser().resolve()
+            if local_archive_dir
+            else None
+        )
         package_dir = self.install_root / name / release["version"]
         archive_dir = self.install_root / "_downloads"
         archive_dir.mkdir(parents=True, exist_ok=True)
         package_dir.mkdir(parents=True, exist_ok=True)
 
         archive_path = archive_dir / release["asset"]
-        print(f"Downloading {name} {release['version']} from {release['url']}")
-        self._download_file(release["url"], archive_path)
+
+        # Check local archive directory first
+        use_local = False
+        if local_archive_dir:
+            if not local_archive_dir.is_dir():
+                print(
+                    f"--local-archive is not a directory ({local_archive_dir}), downloading..."
+                )
+            else:
+                local_path = local_archive_dir / release["asset"]
+                if local_path.is_file():
+                    shutil.copy2(local_path, archive_path)
+                    print(f"Using local archive: {local_path}")
+                    use_local = True
+                else:
+                    print(f"Local archive not found ({local_path}), downloading...")
+        if not use_local:
+            print(f"Downloading {name} {release['version']} from {release['url']}")
+            self._download_file(release["url"], archive_path)
         self._extract_archive(archive_path, package_dir)
 
         binary = self._find_binary(name, package_dir)
@@ -74,7 +105,7 @@ class ServiceInstaller:
 
         return {
             "version": release["version"],
-            "binary": str(binary.resolve()),
+            "binary_path": str(binary.resolve()),
             "homepath": homepath,
             "installed_at": _dt.datetime.now(tz=_dt.timezone.utc).isoformat(),
             "source_url": release["url"],
@@ -89,7 +120,7 @@ class ServiceInstaller:
             return {
                 "version": version,
                 "asset": asset,
-                "url": f"https://dl.grafana.com/oss/release/{asset}",
+                "url": self._build_download_url(name, version, os_token, arch_token),
             }
 
         spec = SPECS[name]
@@ -110,16 +141,33 @@ class ServiceInstaller:
         return {
             "version": version,
             "asset": asset,
-            "url": f"https://github.com/{spec.github_repo}/releases/download/{tag}/{asset}",
+            "url": self._build_download_url(name, version, os_token, arch_token),
         }
 
-    def _github_latest_release(self, repo: str) -> dict[str, Any]:
+    def _build_download_url(
+        self, name: str, version: str, os_token: str, arch_token: str
+    ) -> str:
+        """Build the download URL from the configured template or built-in defaults."""
+        template = _select_str(self.conf, f"{name}.download_url_template")
+        if not template:
+            if name == "grafana":
+                template = "https://dl.grafana.com/oss/release/grafana-{version}.{os}-{arch}.tar.gz"
+            elif name == "prometheus":
+                template = "https://github.com/prometheus/prometheus/releases/download/v{version}/prometheus-{version}.{os}-{arch}.tar.gz"
+            elif name == "tempo":
+                template = "https://github.com/grafana/tempo/releases/download/v{version}/tempo_{version}_{os}_{arch}.tar.gz"
+            else:
+                raise RuntimeError(f"No download source configured for {name}")
+        return template.format(version=version, os=os_token, arch=arch_token)
+
+    @staticmethod
+    def _github_latest_release(repo: str) -> dict[str, Any]:
         try:
-            return self._read_json(
+            return ServiceInstaller._read_json(
                 f"https://api.github.com/repos/{repo}/releases/latest"
             )
         except RuntimeError:
-            return {"tag_name": self._github_latest_tag_from_redirect(repo)}
+            return {"tag_name": ServiceInstaller._github_latest_tag_from_redirect(repo)}
 
     @staticmethod
     def _github_latest_tag_from_redirect(repo: str) -> str:
@@ -139,8 +187,9 @@ class ServiceInstaller:
             raise RuntimeError(f"Failed to resolve latest release tag for {repo}")
         return tag
 
-    def _latest_grafana_version(self) -> str:
-        data = self._read_json("https://grafana.com/api/grafana/versions")
+    @staticmethod
+    def _latest_grafana_version() -> str:
+        data = ServiceInstaller._read_json("https://grafana.com/api/grafana/versions")
         for item in data.get("items", []):
             channels = item.get("channels") or {}
             if channels.get("stable"):
@@ -170,10 +219,11 @@ class ServiceInstaller:
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Failed to download {url}: {exc.reason}") from exc
 
-    def _extract_archive(self, archive_path: Path, target_dir: Path) -> None:
+    @staticmethod
+    def _extract_archive(archive_path: Path, target_dir: Path) -> None:
         with tarfile.open(archive_path) as archive:
-            self._safe_extract_tar(archive, target_dir)
-        self._mark_executables(target_dir)
+            ServiceInstaller._safe_extract_tar(archive, target_dir)
+        ServiceInstaller._mark_executables(target_dir)
 
     @staticmethod
     def _safe_extract_tar(archive: tarfile.TarFile, target_dir: Path) -> None:

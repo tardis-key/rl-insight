@@ -56,6 +56,7 @@ class ServerCommands:
             return 0
 
         manager = ServerServiceManager(conf, install_dir=args.install_dir)
+        local_archive_dir = getattr(args, "local_archive", None)
         before = manager.check_dependencies()
         missing = manager.missing_dependencies(before)
         if not missing and not args.force:
@@ -67,8 +68,24 @@ class ServerCommands:
             print("Missing or incompatible server dependencies:")
             self.console.print_dependencies(missing)
 
+        # Preview planned download URLs
+        planned = manager.plan_install(
+            targets=[s.name for s in (missing or before) if s.enabled]
+        )
+        if planned:
+            print("\nPlanned downloads:")
+            for plan in planned:
+                print(f"  {plan['name']:12} {plan['version']:8}  {plan['url']}")
+            if local_archive_dir:
+                print(f"\nLooking for local archives in: {local_archive_dir}")
+            print()
+
         try:
-            statuses = manager.install_missing_dependencies(force=args.force)
+            statuses = manager.install_missing_dependencies(
+                force=args.force,
+                local_archive_dir=local_archive_dir,
+                planned_releases=planned,
+            )
         except RuntimeError as exc:
             print(f"Install failed: {exc}", file=sys.stderr)
             return 1
