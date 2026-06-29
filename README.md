@@ -21,7 +21,8 @@ In RL-Insight, we define [a general pipeline](https://github.com/verl-project/rl
 
 ## Upcoming Features and Changes
 
-- Q2 Roadmap https://github.com/verl-project/rl-insight/issues/6
+- Q1 Roadmap https://github.com/verl-project/rl-insight/issues/6
+- Q2 Roadmap https://github.com/verl-project/rl-insight/issues/49
 
 ## Getting Started
 
