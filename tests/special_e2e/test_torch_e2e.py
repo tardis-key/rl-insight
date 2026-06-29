@@ -23,7 +23,7 @@ def test_torch_e2e_with_input_path(monkeypatch, tmp_path):
     project_root = current_file.parents[2]
 
     # Get the input data path
-    input_dir = project_root / "data" / "torch_data"
+    input_dir = project_root / "data" / "torch_data" / "torch_profile"
     output_dir = tmp_path / "torch_output"
 
     # Ensure the input directory exists
@@ -35,6 +35,7 @@ def test_torch_e2e_with_input_path(monkeypatch, tmp_path):
         f"--input-path={input_dir}",
         f"--output-path={output_dir}",
         "--profiler-type=torch",
+        "--input-type=multi_json_torch",
     ]
     monkeypatch.setattr(sys, "argv", test_args)
 

@@ -21,10 +21,13 @@ from pathlib import Path
 
 from .parser import BaseClusterParser, register_cluster_parser
 from rl_insight.utils.schema import Constant, DataMap, EventRow
+from rl_insight.data import DataEnum
 
 
 @register_cluster_parser("torch")
 class TorchClusterParser(BaseClusterParser):
+    input_type: DataEnum = DataEnum.MULTI_JSON_TORCH
+
     def __init__(self, params) -> None:
         super().__init__(params)
 

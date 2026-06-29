@@ -23,7 +23,7 @@ def test_mstx_e2e_with_input_path(monkeypatch, tmp_path):
     project_root = current_file.parents[2]
 
     # Get the input data path
-    input_dir = project_root / "data" / "mstx_data"
+    input_dir = project_root / "data" / "mstx_data" / "mstx_profile"
     output_dir = tmp_path / "mstx_output"
 
     # Ensure the input directory exists

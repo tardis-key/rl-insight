@@ -33,8 +33,8 @@ def main():
     )
     arg_parser.add_argument(
         "--input-type",
-        default="multi_json",
-        help="Input data type. Supported: 'multi_json' (for mstx/torch_profile from different directories).",
+        default="multi_json_mstx",
+        help="Input data type. Supported: 'multi_json_mstx', 'multi_json_torch' ",
     )
     arg_parser.add_argument(
         "--profiler-type",

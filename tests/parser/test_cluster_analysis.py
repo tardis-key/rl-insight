@@ -1003,7 +1003,7 @@ class TestIntegration:
                 }
             ]
         )
-        mock_parser_instance.input_type = DataEnum.MULTI_JSON
+        mock_parser_instance.input_type = DataEnum.MULTI_JSON_MSTX
         mock_parser.return_value = mock_parser_instance
         mock_get_parser.return_value = mock_parser
 

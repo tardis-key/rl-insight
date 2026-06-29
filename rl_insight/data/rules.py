@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import glob
+import json
+import os
 from typing import Any, List, Optional
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -63,6 +66,145 @@ class PathExistsRule(ValidationRule):
         except TypeError as e:
             self._error_message = f"Error checking path {data}: {e}"
             return False
+
+
+class MstxJsonFileExistsRule(ValidationRule):
+    """valid Mstx trace_view.json and profiler_info_*.json files is existed in "ASCEND_PROFILER_OUTPUT" path"""
+
+    def check(self, data) -> bool:
+        if not isinstance(data, str):
+            self._error_message = "Data object is not a path"
+            return False
+        self._error_message = ""
+        try:
+            root_path = Path(data)
+
+            if not root_path.exists():
+                self._error_message = f"Source path does not exist: {data}"
+                return False
+
+            ascend_profiler_output = "ASCEND_PROFILER_OUTPUT"
+            trace_view_filename = "trace_view.json"
+            profiler_info_filename = "profiler_info_*.json"
+
+            # get all *_ascend_pt path
+            ascend_pt_pattern = str(root_path / "*" / "*_ascend_pt")
+            ascend_pt_folders = glob.glob(ascend_pt_pattern)
+
+            if not ascend_pt_folders:
+                self._error_message = f"No *_ascend_pt path in {data}"
+                return False
+
+            for ascend_pt_folder in ascend_pt_folders:
+                ascend_pt_path = Path(ascend_pt_folder)
+
+                if not ascend_pt_path.is_dir():
+                    continue
+
+                # get trace_view.json file path
+                trace_view_path = (
+                    ascend_pt_path / ascend_profiler_output / trace_view_filename
+                )
+                if not trace_view_path.exists():
+                    self._error_message = f"trace_view.json does not exist in: {ascend_pt_path}/ASCEND_PROFILER_OUTPUT"
+                    return False
+
+                # get profiler_info_*.json file path
+                profiler_pattern = str(ascend_pt_path / profiler_info_filename)
+                profiler_files = glob.glob(profiler_pattern)
+
+                if not profiler_files:
+                    self._error_message = (
+                        f"profiler_info_*.json does not exist in: {ascend_pt_path}"
+                    )
+                    return False
+            return True
+        except Exception as e:
+            self._error_message = f"Error checking path {data}: {e}"
+            return False
+
+    @property
+    def error_message(self) -> str:
+        return self._error_message
+
+
+class MstxJsonFieldValidRule(ValidationRule):
+    """valid Mstx trace_view.json and profiler_info_*.json files JSON format"""
+
+    def check(self, data) -> bool:
+        if not isinstance(data, str):
+            self._error_message = "Data object is not a path"
+            return False
+        self._error_message = ""
+        try:
+            root_path = Path(data)
+
+            if not root_path.exists():
+                self._error_message = f"Source path does not exist: {data}"
+                return False
+
+            # get all *_ascend_pt path
+            ascend_pt_pattern = str(root_path / "*" / "*_ascend_pt")
+            ascend_pt_folders = glob.glob(ascend_pt_pattern)
+
+            for ascend_pt_folder in ascend_pt_folders:
+                ascend_pt_path = Path(ascend_pt_folder)
+
+                # valid trace_view.json format
+                trace_view_path = (
+                    ascend_pt_path / "ASCEND_PROFILER_OUTPUT" / "trace_view.json"
+                )
+                if os.path.getsize(trace_view_path) == 0:
+                    self._error_message = f"File is empty: {trace_view_path}"
+                    return False
+                with open(trace_view_path, "r", encoding="utf-8") as f:
+                    trace_view_data = json.load(f)
+
+                if len(trace_view_data) == 0:
+                    self._error_message = f"File is empty: {trace_view_path}"
+                    return False
+
+                required_keys = {"ph", "name", "pid", "tid"}
+                for row in trace_view_data:
+                    missing_keys = required_keys - row.keys()
+                    if missing_keys:
+                        self._error_message = f"File field is missing: {missing_keys} in FilePath: {trace_view_path}"
+                        return False
+
+                # valid profiler_info_*.json format
+                profiler_pattern = str(ascend_pt_path / "profiler_info_*.json")
+                profiler_info_files = glob.glob(profiler_pattern)
+                for file in profiler_info_files:
+                    if os.path.getsize(trace_view_path) == 0:
+                        self._error_message = f"File is empty: {trace_view_path}"
+                        return False
+                    with open(file, "r", encoding="utf-8") as f:
+                        profiler_info_data = json.load(f)
+                    if len(profiler_info_data) == 0:
+                        self._error_message = f"File is empty: {file}"
+                        return False
+                    required_keys = {
+                        "config",
+                        "start_info",
+                        "end_info",
+                        "torch_npu_version",
+                        "cann_version",
+                        "rank_id",
+                    }
+                    missing_keys = required_keys - set(profiler_info_data.keys())
+                    if missing_keys:
+                        self._error_message = (
+                            f"File field is missing: {missing_keys} in FilePath: {file}"
+                        )
+                        return False
+            return True
+        except Exception as e:
+            self._error_message = f"Error checking path {data}: {e}"
+            return False
+
+    @property
+    def error_message(self) -> str:
+        return self._error_message
 
 
 class ParserOutputValidatorRule(ValidationRule):
