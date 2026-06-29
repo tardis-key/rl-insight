@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from .timeline_visualizer import RLTimelineVisualizer
+from .timeline_visualizer import RLTimelinePNGVisualizer
 from .visualizer import (
     BaseVisualizer,
     get_cluster_visualizer_cls,
@@ -22,4 +23,5 @@ __all__ = [
     "BaseVisualizer",
     "get_cluster_visualizer_cls",
     "RLTimelineVisualizer",
+    "RLTimelinePNGVisualizer",
 ]
