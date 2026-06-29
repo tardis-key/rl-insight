@@ -4,6 +4,7 @@ providers:
   - name: RL-Insight
     orgId: 1
     folder: RL-Insight
+    folderUid: rl-insight
     type: file
     disableDeletion: false
     updateIntervalSeconds: 10

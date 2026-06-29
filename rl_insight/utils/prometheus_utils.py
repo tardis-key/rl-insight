@@ -233,11 +233,35 @@ class PrometheusScrapeUpdater:
         self._prom_file = str(conf.prometheus.config_file)
         self._reload_port = int(conf.prometheus.prometheus_port)
 
-    def update(self, server_addresses: list[str]) -> None:
+    @staticmethod
+    def _build_static_configs(
+        server_addresses: list[str],
+        labels: list[Mapping[str, Any] | None] | None = None,
+    ) -> list[dict[str, Any]]:
+        if labels is None:
+            return [{"targets": server_addresses}]
+
+        static_configs: list[dict[str, Any]] = []
+        for address, target_labels in zip(server_addresses, labels):
+            static_config: dict[str, Any] = {"targets": [address]}
+            if target_labels:
+                static_config["labels"] = {
+                    str(key): str(value) for key, value in target_labels.items()
+                }
+            static_configs.append(static_config)
+        return static_configs
+
+    def update(
+        self,
+        server_addresses: list[str],
+        labels: list[Mapping[str, Any] | None] | None = None,
+    ) -> None:
         """Rewrite on-disk Prometheus scrape config for ``server_addresses`` and POST ``/-/reload``.
 
         Args:
             server_addresses: ``host:port`` targets (typically the hub ``/metrics`` endpoints).
+            labels: Optional per-target Prometheus labels. When provided, its length must match
+                ``server_addresses``; use ``None`` for targets without labels.
 
         Note:
             No-op unless ``server.backend`` is ``ray``; requires a running Ray cluster.
@@ -245,6 +269,11 @@ class PrometheusScrapeUpdater:
         if not server_addresses:
             logger.warning("No server addresses available to update Prometheus config")
             return
+        if labels is not None and len(labels) != len(server_addresses):
+            raise ValueError(
+                "labels length must match server_addresses length: "
+                f"{len(labels)} != {len(server_addresses)}"
+            )
         if self._backend != "ray":
             logger.warning(
                 "server.backend is %r; only %r supports Prometheus scrape update and reload.",
@@ -259,7 +288,7 @@ class PrometheusScrapeUpdater:
             scrape_configs = prometheus_data.setdefault("scrape_configs", [])
             new_job = {
                 "job_name": self._job_name,
-                "static_configs": [{"targets": server_addresses}],
+                "static_configs": self._build_static_configs(server_addresses, labels),
             }
             for i, sc in enumerate(scrape_configs):
                 if sc.get("job_name") == self._job_name:
@@ -303,6 +332,7 @@ def update_prometheus_config(
     config: Mapping[str, Any] | DictConfig | None,
     server_addresses: list[str],
     job_name: str | None = None,
+    labels: list[Mapping[str, Any] | None] | None = None,
 ) -> None:
     """Rewrite on-disk Prometheus scrape config for ``server_addresses`` and POST ``/-/reload``.
 
@@ -310,8 +340,12 @@ def update_prometheus_config(
         config: Trainer monitor config (or ``None`` for defaults); used for paths and backend selection.
         server_addresses: ``host:port`` targets (typically the hub ``/metrics`` endpoints).
         job_name: Override scrape job name; default uses ``PrometheusScrape.TRAINER_METRICS_JOB``.
+        labels: Optional per-target Prometheus labels. When provided, its length must match
+            ``server_addresses``; use ``None`` for targets without labels.
 
     Note:
         No-op unless ``server.backend`` is ``ray``; requires a running Ray cluster.
     """
-    PrometheusScrapeUpdater(config, job_name=job_name).update(server_addresses)
+    PrometheusScrapeUpdater(config, job_name=job_name).update(
+        server_addresses, labels=labels
+    )

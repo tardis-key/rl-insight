@@ -4,27 +4,12 @@
   "metadata": {
     "name": "a4cabbce-92af-4a84-9399-4deba24ae6d1",
     "namespace": "default",
-    "uid": "046395f5-1916-4107-93d6-1f78330dd7f0",
-    "resourceVersion": "1781523042381008",
-    "generation": 3,
-    "creationTimestamp": "2026-06-15T09:51:45Z",
-    "labels": {
-      "grafana.app/deprecatedInternalID": "3810003852562432"
-    },
+    "uid": "bc2fbacf-829d-4432-8f4f-4520a3c1a74f",
     "annotations": {
-      "grafana.app/createdBy": "access-policy:service",
-      "grafana.app/folder": "afoiimp8kwq2oe",
       "grafana.app/managedBy": "classic-file-provisioning",
       "grafana.app/managerAllowsEdits": "true",
       "grafana.app/managerId": "RL-Insight",
-      "grafana.app/saved-from-ui": "Grafana v13.0.2 (3fcdbc5a)",
-      "grafana.app/sourceChecksum": "b9cd89b43743ddd82b76cee42dcdc6b3",
-      "grafana.app/sourcePath": "rl_insight/config/services/grafana/dashboards/verl_sync_mode_with_vllm_engine.json",
-      "grafana.app/sourceTimestamp": "1781516976000",
-      "grafana.app/updatedBy": "user:ffoiimkbz35z4f",
-      "grafana.app/updatedTimestamp": "2026-06-15T11:30:42Z",
-      "grafana.app/folderTitle": "RL-Insight",
-      "grafana.app/folderUrl": "/dashboards/f/afoiimp8kwq2oe/rl-insight"
+      "grafana.app/folderTitle": "RL-Insight"
     }
   },
   "spec": {
@@ -76,9 +61,9 @@
                       "spec": {
                         "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name, engine) (rate(vllm:request_prompt_tokens_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
+                        "expr": "sum by (model_name, engine, replica) (rate(vllm:request_prompt_tokens_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))",
                         "interval": "",
-                        "legendFormat": "Prompt Tokens/Sec - {{model_name}} - {{engine}}",
+                        "legendFormat": "Prompt Tokens/Sec - {{model_name}} - {{engine}} - replica {{replica}}",
                         "queryType": "randomWalk",
                         "range": true
                       }
@@ -100,9 +85,9 @@
                       "spec": {
                         "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name, engine) (rate(vllm:generation_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
+                        "expr": "sum by (model_name, engine, replica) (rate(vllm:generation_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))",
                         "interval": "",
-                        "legendFormat": "Generation Tokens/Sec - {{model_name}} - {{engine}}",
+                        "legendFormat": "Generation Tokens/Sec - {{model_name}} - {{engine}} - replica {{replica}}",
                         "queryType": "randomWalk",
                         "range": true
                       }
@@ -317,11 +302,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by(finished_reason, model_name, engine) (increase(vllm:request_success_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
+                        "expr": "sum by(finished_reason, model_name, engine) (increase(vllm:request_success_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))",
                         "interval": "",
-                        "legendFormat": "{{finished_reason}} - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{finished_reason}} - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -336,7 +323,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "alertThreshold": true,
@@ -437,11 +424,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by(model_name, engine) (rate(vllm:request_queue_time_seconds_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
+                        "expr": "sum by(model_name, engine, replica) (rate(vllm:request_queue_time_seconds_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))",
                         "interval": "",
-                        "legendFormat": "{{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{model_name}} - {{engine}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -456,7 +445,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "alertThreshold": true,
@@ -557,11 +546,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by(model_name, engine) (rate(vllm:request_decode_time_seconds_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
+                        "expr": "sum by(model_name, engine, replica) (rate(vllm:request_decode_time_seconds_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))",
                         "interval": "",
-                        "legendFormat": "Decode - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Decode - {{model_name}} - {{engine}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -579,11 +570,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by(model_name, engine) (rate(vllm:request_prefill_time_seconds_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
+                        "expr": "sum by(model_name, engine, replica) (rate(vllm:request_prefill_time_seconds_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))",
                         "interval": "",
-                        "legendFormat": "Prefill - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Prefill - {{model_name}} - {{engine}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "B",
@@ -598,7 +591,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "alertThreshold": true,
@@ -699,11 +692,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by(model_name, engine) (rate(vllm:request_max_num_generation_tokens_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
+                        "expr": "sum by(model_name, engine, replica) (rate(vllm:request_max_num_generation_tokens_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))",
                         "interval": "",
-                        "legendFormat": "{{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{model_name}} - {{engine}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -718,7 +713,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "alertThreshold": true,
@@ -819,11 +814,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "(sum by (model_name) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", }[1d])))",
+                        "expr": "(sum by (model_name,replica) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1d])))",
                         "interval": "",
-                        "legendFormat": "Input: {{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Input: {{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -841,11 +838,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "(sum by (model_name) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", }[1d])))",
+                        "expr": "(sum by (model_name,replica) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1d])))",
                         "interval": "",
-                        "legendFormat": "Generated: {{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Generated: {{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "B",
@@ -860,7 +859,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -974,7 +973,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -1047,11 +1046,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (delta(vllm:request_success_total{engine=~\"$workerid\", }[1d]))",
+                        "expr": "sum by (model_name, replica) (delta(vllm:request_success_total{engine=~\"$workerid\", replica=~\"$replica\"}[1d]))",
                         "interval": "",
-                        "legendFormat": "{{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -1066,7 +1067,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "piechart",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "displayLabels": [],
@@ -1136,11 +1137,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", }[1d])) / sum by (model_name) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", }[1d]))",
+                        "expr": "sum by (model_name, replica) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1d])) / sum by (model_name, replica) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1d]))",
                         "interval": "",
-                        "legendFormat": "{{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -1155,7 +1158,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -1937,11 +1940,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", }[1d])) + sum by (model_name) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", }[1d]))",
+                        "expr": "sum by (model_name, replica) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1d])) + sum by (model_name, replica) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1d]))",
                         "interval": "",
-                        "legendFormat": "{{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -1956,7 +1961,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -2237,32 +2242,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_actor_perf_cpu_memory_used_gb\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -3088,32 +3068,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_critic_advantages_max\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -3259,11 +3214,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "histogram_quantile(0.99, sum by(le, model_name, engine) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
+                        "expr": "histogram_quantile(0.99, sum by(le, model_name, engine) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])))",
                         "interval": "",
-                        "legendFormat": "P99 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P99 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -3281,11 +3238,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "histogram_quantile(0.95, sum by(le, model_name, engine) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
+                        "expr": "histogram_quantile(0.95, sum by(le, model_name, engine) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])))",
                         "interval": "",
-                        "legendFormat": "P95 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P95 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "B",
@@ -3303,11 +3262,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "histogram_quantile(0.9, sum by(le, model_name, engine) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
+                        "expr": "histogram_quantile(0.9, sum by(le, model_name, engine) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])))",
                         "interval": "",
-                        "legendFormat": "P90 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P90 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "C",
@@ -3325,11 +3286,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "histogram_quantile(0.5, sum by(le, model_name, engine) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
+                        "expr": "histogram_quantile(0.5, sum by(le, model_name, engine) (rate(vllm:request_time_per_output_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])))",
                         "interval": "",
-                        "legendFormat": "P50 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P50 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "D",
@@ -3347,11 +3310,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "(sum by(model_name, engine) (rate(vllm:request_time_per_output_token_seconds_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))\n/\nsum by(model_name, engine) (rate(vllm:request_time_per_output_token_seconds_count{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
+                        "expr": "(sum by(model_name, engine) (rate(vllm:request_time_per_output_token_seconds_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))\n/\nsum by(model_name, engine) (rate(vllm:request_time_per_output_token_seconds_count{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])))",
                         "interval": "",
-                        "legendFormat": "Mean - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Mean - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "E",
@@ -3892,32 +3857,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_critic_returns_mean\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -4771,11 +4711,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "max_over_time(sum by (model_name) (rate(vllm:generation_tokens_total{engine=~\"$workerid\", }[2m]))[24h:])",
+                        "expr": "max_over_time(sum by (model_name, replica) (rate(vllm:generation_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[2m]))[24h:])",
                         "interval": "",
-                        "legendFormat": "{{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -4790,7 +4732,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -5071,32 +5013,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_global_seqlen_balanced_min\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -5214,32 +5131,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_global_seqlen_max\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -5357,32 +5249,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_global_seqlen_mean\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -5736,32 +5603,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_num_turns_max\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -5997,32 +5839,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_num_turns_min\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -6730,32 +6547,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_prompt_length_clip_ratio\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -6991,32 +6783,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_prompt_length_mean\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -7134,32 +6901,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_prompt_length_min\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -7423,11 +7165,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (delta(vllm:request_success_total{engine=~\"$workerid\", }[1w]))",
+                        "expr": "sum by (model_name, replica) (delta(vllm:request_success_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w]))",
                         "interval": "",
-                        "legendFormat": "{{ model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{ model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -7442,7 +7186,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "gauge",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "barShape": "flat",
@@ -7609,32 +7353,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_response_length_max\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -7752,32 +7471,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_response_length_mean\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -7895,32 +7589,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_response_length_min\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -8038,32 +7707,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_response_length_non_aborted_clip_ratio\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -8181,32 +7825,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_response_length_non_aborted_max\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -8324,32 +7943,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_response_length_non_aborted_mean\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -8467,32 +8061,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_response_length_non_aborted_min\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -8610,32 +8179,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_rollout_corr_chi2_seq\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -8753,32 +8297,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_rollout_corr_chi2_token\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -8896,32 +8415,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_rollout_corr_k3_kl\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -8949,11 +8443,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "(sum by (model_name) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", }[1w])) +\nsum by (model_name) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", }[1w]))) / sum by (model_name) (delta(vllm:request_success_total{engine=~\"$workerid\", }[1w]))",
+                        "expr": "(sum by (model_name, replica) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w])) +\nsum by (model_name, replica) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w]))) / sum by (model_name, replica) (delta(vllm:request_success_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w]))",
                         "interval": "",
-                        "legendFormat": "{{ model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{ model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -8968,7 +8464,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "gauge",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "barShape": "flat",
@@ -9135,32 +8631,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_rollout_corr_kl\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -9396,32 +8867,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_rollout_corr_log_ppl_diff\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -9539,32 +8985,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_rollout_corr_log_ppl_diff_max\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -9682,32 +9103,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_rollout_corr_log_ppl_diff_min\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -9825,32 +9221,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_rollout_corr_ppl_ratio\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -9968,32 +9339,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_rollout_corr_rollout_log_ppl\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -10111,32 +9457,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_rollout_corr_rollout_ppl\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -10372,32 +9693,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_rollout_corr_training_ppl\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -10425,11 +9721,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "(sum by (model_name) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", }[1w])) + sum by (model_name) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", }[1w])))/ sum by (model_name) (delta(vllm:request_success_total{engine=~\"$workerid\", }[1w]))",
+                        "expr": "(sum by (model_name, replica) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w])) + sum by (model_name, replica) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w])))/ sum by (model_name, replica) (delta(vllm:request_success_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w]))",
                         "interval": "",
-                        "legendFormat": "{{ model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{ model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -10444,7 +9742,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "gauge",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "barShape": "flat",
@@ -10611,32 +9909,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_per_token_ms_adv\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -10754,32 +10027,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_per_token_ms_gen\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -10897,32 +10145,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_per_token_ms_ref\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -11040,32 +10263,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_per_token_ms_update_actor\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -11301,32 +10499,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_compute_score_max\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -11444,32 +10617,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_compute_score_mean\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -11587,32 +10735,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_compute_score_min\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -11730,32 +10853,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_generate_sequences_max\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -11873,32 +10971,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_generate_sequences_mean\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -11926,11 +10999,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", }[1w]))",
+                        "expr": "sum by (model_name, replica) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w]))",
                         "interval": "",
-                        "legendFormat": "In: {{ model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "In: {{ model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -11948,11 +11023,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", }[1w]))",
+                        "expr": "sum by (model_name, replica) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w]))",
                         "interval": "",
-                        "legendFormat": "Out: {{ model_name }}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Out: {{ model_name }} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "B",
@@ -11967,7 +11044,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "gauge",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "barShape": "flat",
@@ -12134,32 +11211,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_generate_sequences_min\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -12277,32 +11329,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_num_preempted_max\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -12420,32 +11447,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_num_preempted_mean\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -12563,32 +11565,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_num_preempted_min\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -13178,32 +12155,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_slowest_response_length\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -13321,32 +12273,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_slowest_tool_calls\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -13374,11 +12301,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", }[1w])) / sum by (model_name) (delta(vllm:request_success_total{engine=~\"$workerid\", }[1w]))",
+                        "expr": "sum by (model_name, replica) (delta(vllm:prompt_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w])) / sum by (model_name, replica) (delta(vllm:request_success_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w]))",
                         "interval": "",
-                        "legendFormat": "In: {{ model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "In: {{ model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -13396,11 +12325,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", }[1w])) / sum by (model_name) (delta(vllm:request_success_total{engine=~\"$workerid\", }[1w]))",
+                        "expr": "sum by (model_name,replica) (delta(vllm:generation_tokens_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w])) / sum by (model_name,replica) (delta(vllm:request_success_total{engine=~\"$workerid\", replica=~\"$replica\"}[1w]))",
                         "interval": "",
-                        "legendFormat": "Out: {{ model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Out: {{ model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "B",
@@ -13415,7 +12346,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "gauge",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "barShape": "flat",
@@ -13582,32 +12513,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_tool_calls_max\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -13725,32 +12631,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_agent_loop_tool_calls_mean\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -13986,32 +12867,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_gen\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -14247,32 +13103,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_ref\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -14390,32 +13221,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_reward\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -14533,32 +13339,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_stop_profile\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -14676,32 +13457,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_step\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -14819,32 +13575,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_stop_profile\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -14872,11 +13603,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "increase(vllm:prefix_cache_hits_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]) / increase(vllm:prefix_cache_queries_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])",
+                        "expr": "increase(vllm:prefix_cache_hits_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]) / increase(vllm:prefix_cache_queries_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])",
                         "interval": "",
-                        "legendFormat": "Prefix Cache Hit Rate - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Prefix Cache Hit Rate - {{model_name}} - {{engine}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -14891,7 +13624,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "alertThreshold": true,
@@ -15082,32 +13815,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_testing\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -15225,32 +13933,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_update_actor\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -15368,32 +14051,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_timing_s_update_weights\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -15819,32 +14477,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_training_rollout_probs_diff_max\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -15962,32 +14595,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_training_rollout_probs_diff_mean\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -16105,32 +14713,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_training_rollout_probs_diff_std\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -16248,32 +14831,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_training_rollout_probs_diff_valid\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -16391,32 +14949,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_val_aux_num_turns_max\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -16534,32 +15067,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_val_aux_num_turns_mean\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -16795,32 +15303,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_val_aux_openai_gsm8k_reward_mean_1\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -16938,32 +15421,7 @@
                     }
                   }
                 },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "{__name__=\"rl_insight_monitor_val_core_openai_gsm8k_acc_mean_1\", experiment_name=\"qwen2_7b_function_rm\", instance=\"192.168.9.128:9092\", job=\"trainer_metrics\", project=\"verl_grpo_example_gsm8k\"}"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                "overrides": []
               }
             }
           }
@@ -16991,11 +15449,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "vllm:kv_cache_usage_perc{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }",
+                        "expr": "vllm:kv_cache_usage_perc{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}",
                         "interval": "",
-                        "legendFormat": "KV Cache Usage - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "KV Cache Usage - {{model_name}} - {{engine}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -17208,11 +15668,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "rate(vllm:spec_decode_num_accepted_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])",
+                        "expr": "rate(vllm:spec_decode_num_accepted_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])",
                         "interval": "",
-                        "legendFormat": "Accepted Throughput - {{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Accepted Throughput - {{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -17230,11 +15692,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "rate(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])",
+                        "expr": "rate(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])",
                         "interval": "",
-                        "legendFormat": "Drafted Throughput - {{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Drafted Throughput - {{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "B",
@@ -17249,7 +15713,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "alertThreshold": true,
@@ -17350,11 +15814,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (rate(vllm:spec_decode_num_accepted_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])) / sum by (model_name) (rate(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])) * 100",
+                        "expr": "sum by (model_name, replica) (rate(vllm:spec_decode_num_accepted_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])) / sum by (model_name, replica) (rate(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])) * 100",
                         "interval": "",
-                        "legendFormat": "{{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -17369,7 +15835,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -17443,11 +15909,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "increase(vllm:spec_decode_num_accepted_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])",
+                        "expr": "increase(vllm:spec_decode_num_accepted_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])",
                         "interval": "",
-                        "legendFormat": "Accepted - {{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Accepted - {{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -17465,11 +15933,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "increase(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])",
+                        "expr": "increase(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])",
                         "interval": "",
-                        "legendFormat": "Drafted - {{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Drafted - {{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "B",
@@ -17484,7 +15954,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "alertThreshold": true,
@@ -17585,11 +16055,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (rate(vllm:spec_decode_num_accepted_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])) / sum by (model_name) (rate(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])) * 100",
+                        "expr": "sum by (model_name, replica) (rate(vllm:spec_decode_num_accepted_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])) / sum by (model_name, replica) (rate(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])) * 100",
                         "interval": "",
-                        "legendFormat": "{{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -17604,7 +16076,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "alertThreshold": true,
@@ -17714,11 +16186,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (rate(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])) / sum by (model_name) (rate(vllm:spec_decode_num_drafts_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
+                        "expr": "sum by (model_name, replica) (rate(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])) / sum by (model_name, replica) (rate(vllm:spec_decode_num_drafts_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))",
                         "interval": "",
-                        "legendFormat": "{{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -17733,7 +16207,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "alertThreshold": true,
@@ -17842,11 +16316,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "sum by (model_name) (rate(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])) / sum by (model_name) (rate(vllm:spec_decode_num_drafts_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
+                        "expr": "sum by (model_name, replica) (rate(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval])) / sum by (model_name, replica) (rate(vllm:spec_decode_num_drafts_total{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))",
                         "interval": "",
-                        "legendFormat": "{{model_name}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "{{model_name}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -17861,7 +16337,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "stat",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "colorMode": "value",
@@ -18184,11 +16660,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
                         "expr": "(sum by(model_name, engine) (rate(vllm:time_to_first_token_seconds_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))\n/\nsum by(model_name, engine) (rate(vllm:time_to_first_token_seconds_count{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
                         "interval": "",
-                        "legendFormat": "Average - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Average - {{model_name}} - {{engine}} - replica $replica ",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -18206,11 +16684,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
                         "expr": "histogram_quantile(0.5, sum by(le, model_name, engine)(rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
                         "interval": "",
-                        "legendFormat": "P50 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P50 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "B",
@@ -18228,11 +16708,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
                         "expr": "histogram_quantile(0.9, sum by(le, model_name, engine)(rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
                         "interval": "",
-                        "legendFormat": "P90 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P90 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "C",
@@ -18250,11 +16732,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
                         "expr": "histogram_quantile(0.95, sum by(le, model_name, engine) (rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
                         "interval": "",
-                        "legendFormat": "P95 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P95 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "D",
@@ -18272,11 +16756,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
                         "expr": "histogram_quantile(0.99, sum by(le, model_name, engine)(rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
                         "interval": "",
-                        "legendFormat": "P99 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P99 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "E",
@@ -18489,11 +16975,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
                         "expr": "sum by(model_name, engine) (rate(vllm:e2e_request_latency_seconds_sum{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))\n/\nsum by(model_name, engine) (rate(vllm:e2e_request_latency_seconds_count{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
                         "interval": "",
-                        "legendFormat": "Average - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Average - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -18511,11 +16999,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
                         "expr": "histogram_quantile(0.5, sum by(le, model_name, engine) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
                         "interval": "",
-                        "legendFormat": "P50 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P50 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "B",
@@ -18533,11 +17023,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
                         "expr": "histogram_quantile(0.9, sum by(le, model_name, engine) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
                         "interval": "",
-                        "legendFormat": "P90 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P90 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "C",
@@ -18555,11 +17047,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
                         "expr": "histogram_quantile(0.95, sum by(le, model_name, engine) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
                         "interval": "",
-                        "legendFormat": "P95 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P95 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "D",
@@ -18577,11 +17071,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
                         "expr": "histogram_quantile(0.99, sum by(le, model_name, engine) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval])))",
                         "interval": "",
-                        "legendFormat": "P99 - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "P99 - {{model_name}} - {{engine}} - replica $replica",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "E",
@@ -18794,11 +17290,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "vllm:num_requests_running{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }",
+                        "expr": "vllm:num_requests_running{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}",
                         "interval": "",
-                        "legendFormat": "Num Running - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Num Running - {{model_name}} - {{engine}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -18816,11 +17314,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "vllm:num_requests_swapped{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }",
+                        "expr": "vllm:num_requests_swapped{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}",
                         "interval": "",
-                        "legendFormat": "Num Swapped - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Num Swapped - {{model_name}} - {{engine}} -  replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "B",
@@ -18838,11 +17338,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
+                        "editorMode": "code",
                         "exemplar": true,
-                        "expr": "vllm:num_requests_waiting{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }",
+                        "expr": "vllm:num_requests_waiting{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}",
                         "interval": "",
-                        "legendFormat": "Num Waiting - {{model_name}} - {{engine}}",
-                        "queryType": "randomWalk"
+                        "legendFormat": "Num Waiting - {{model_name}} - {{engine}} - replica {{replica}}",
+                        "queryType": "randomWalk",
+                        "range": true
                       }
                     },
                     "refId": "C",
@@ -19055,12 +17557,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
-                        "expr": "sum by(le, model_name, engine) (increase(vllm:request_prompt_tokens_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
+                        "editorMode": "code",
+                        "expr": "sum by(le, model_name, engine, replica) (increase(vllm:request_prompt_tokens_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))",
                         "format": "heatmap",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
-                        "legendFormat": "{{le}}",
+                        "legendFormat": "{{le}} - replica {{replica}}",
                         "range": true,
                         "useBackend": false
                       }
@@ -19077,7 +17580,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "heatmap",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "annotations": {
@@ -19103,7 +17606,7 @@
                   "color": "rgba(255,0,255,0.7)"
                 },
                 "filterValues": {
-                  "le": 1e-9
+                  "le": 1e-09
                 },
                 "legend": {
                   "show": true,
@@ -19165,12 +17668,13 @@
                         "name": "${datasource}"
                       },
                       "spec": {
-                        "expr": "sum by(le, model_name, engine) (increase(vllm:request_generation_tokens_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", }[$interval]))",
+                        "editorMode": "code",
+                        "expr": "sum by(le, model_name, engine, replica) (increase(vllm:request_generation_tokens_bucket{model_name=~\"$vllm_model_name\", engine=~\"$workerid\", replica=~\"$replica\"}[$interval]))",
                         "format": "heatmap",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
-                        "legendFormat": "{{le}}",
+                        "legendFormat": "{{le}} - replica {{replica}}",
                         "range": true,
                         "useBackend": false
                       }
@@ -19187,7 +17691,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "heatmap",
-            "version": "13.0.1",
+            "version": "13.0.2",
             "spec": {
               "options": {
                 "annotations": {
@@ -19213,7 +17717,7 @@
                   "color": "rgba(255,0,255,0.7)"
                 },
                 "filterValues": {
-                  "le": 1e-9
+                  "le": 1e-09
                 },
                 "legend": {
                   "show": true,
@@ -20911,7 +19415,7 @@
                         "x": 0,
                         "y": 0,
                         "width": 12,
-                        "height": 8,
+                        "height": 13,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-1"
@@ -20924,7 +19428,7 @@
                         "x": 12,
                         "y": 0,
                         "width": 12,
-                        "height": 8,
+                        "height": 13,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-2"
@@ -20935,9 +19439,9 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 8,
+                        "y": 13,
                         "width": 12,
-                        "height": 8,
+                        "height": 13,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-3"
@@ -20948,9 +19452,9 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 8,
+                        "y": 13,
                         "width": 12,
-                        "height": 8,
+                        "height": 13,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-5"
@@ -20961,9 +19465,9 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 16,
+                        "y": 26,
                         "width": 12,
-                        "height": 8,
+                        "height": 13,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-6"
@@ -20974,9 +19478,9 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 16,
+                        "y": 26,
                         "width": 12,
-                        "height": 8,
+                        "height": 13,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-7"
@@ -20987,7 +19491,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 24,
+                        "y": 39,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21000,7 +19504,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 24,
+                        "y": 39,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21013,9 +19517,9 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 32,
+                        "y": 47,
                         "width": 12,
-                        "height": 8,
+                        "height": 12,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-10"
@@ -21026,9 +19530,9 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 32,
+                        "y": 47,
                         "width": 12,
-                        "height": 8,
+                        "height": 12,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-11"
@@ -21039,7 +19543,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 40,
+                        "y": 59,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21052,7 +19556,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 40,
+                        "y": 59,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21065,9 +19569,9 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 48,
+                        "y": 67,
                         "width": 12,
-                        "height": 8,
+                        "height": 9,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-28"
@@ -21078,9 +19582,9 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 48,
+                        "y": 67,
                         "width": 12,
-                        "height": 8,
+                        "height": 9,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-35"
@@ -21091,7 +19595,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 56,
+                        "y": 76,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21104,7 +19608,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 56,
+                        "y": 76,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21117,7 +19621,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 64,
+                        "y": 84,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21130,7 +19634,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 64,
+                        "y": 84,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21143,7 +19647,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 72,
+                        "y": 92,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21156,7 +19660,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 72,
+                        "y": 92,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21169,7 +19673,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 80,
+                        "y": 100,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21182,7 +19686,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 80,
+                        "y": 100,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21195,7 +19699,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 88,
+                        "y": 108,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21208,7 +19712,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 88,
+                        "y": 108,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21221,7 +19725,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 96,
+                        "y": 116,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21234,7 +19738,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 96,
+                        "y": 116,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21247,7 +19751,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 104,
+                        "y": 124,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21260,7 +19764,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 104,
+                        "y": 124,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21273,7 +19777,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 0,
-                        "y": 112,
+                        "y": 132,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21286,7 +19790,7 @@
                       "kind": "GridLayoutItem",
                       "spec": {
                         "x": 12,
-                        "y": 112,
+                        "y": 132,
                         "width": 12,
                         "height": 8,
                         "element": {
@@ -21364,7 +19868,7 @@
           "regex": "",
           "current": {
             "text": "prometheus",
-            "value": "cfkbchznlhdkwe"
+            "value": "prometheus"
           },
           "options": [],
           "multi": false,
@@ -21462,6 +19966,43 @@
           "skipUrlSync": false,
           "allowCustomValue": true,
           "valuesFormat": "csv"
+        }
+      },
+      {
+        "kind": "QueryVariable",
+        "spec": {
+          "name": "replica",
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          },
+          "label": "Replica",
+          "hide": "dontHide",
+          "refresh": "onDashboardLoad",
+          "skipUrlSync": false,
+          "description": "Replica rank of rollout",
+          "query": {
+            "kind": "DataQuery",
+            "group": "prometheus",
+            "version": "v0",
+            "datasource": {
+              "name": "prometheus"
+            },
+            "spec": {
+              "qryType": 1,
+              "query": "label_values(vllm:request_prompt_tokens_sum,replica)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            }
+          },
+          "regex": "",
+          "regexApplyTo": "value",
+          "sort": "disabled",
+          "definition": "label_values(vllm:request_prompt_tokens_sum,replica)",
+          "options": [],
+          "multi": false,
+          "includeAll": true,
+          "allValue": ".*",
+          "allowCustomValue": true
         }
       }
     ]
