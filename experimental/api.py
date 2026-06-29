@@ -29,14 +29,15 @@ from typing import Any, Callable, Generator, Mapping
 from omegaconf import DictConfig
 
 from .client import create_monitor_client
-from .config import load_monitor_config
+from .utils.monitor_config_loader import load_monitor_config
 from .utils import MonitorEventKind
+from .utils.constants import MonitorEnv
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
 __all__ = [
-    "close",
+    "finish",
     "init",
     "metric_count",
     "metric_distribution",
@@ -56,6 +57,7 @@ class _MonitorState:
         conf: Merged trainer monitor config.
         namespace: Config ``namespace`` used for metric/OTEL resource naming (not Ray actor namespace).
         process_id: String PID added to trace attributes on emit.
+        labels: Process-wide labels attached to every metric and trace event.
     """
 
     enabled: bool = False
@@ -63,16 +65,24 @@ class _MonitorState:
     conf: DictConfig | None = None
     namespace: str = ""
     process_id: str = field(default_factory=lambda: str(os.getpid()))
+    labels: dict[str, Any] = field(default_factory=dict)
 
 
 _STATE = _MonitorState()
 
 
-def init(config: Mapping[str, Any] | None = None) -> None:
+def init(
+    project: str | None = None,
+    experiment_name: str | None = None,
+    config: Mapping[str, Any] | DictConfig | None = None,
+) -> None:
     """Load merged monitor config, create backend client, enable metric/trace helpers (once per process).
 
     Args:
-        config: Optional user overrides merged into training defaults; see ``load_monitor_config``.
+        project: Optional project name attached to all metrics and traces as the ``project`` label/attribute.
+        experiment_name: Optional experiment name attached to all metrics and traces as the
+            ``experiment_name`` label/attribute.
+        config: Optional dict-like or ``DictConfig`` overrides merged into training defaults; see ``load_monitor_config``.
 
     Note:
         Repeated calls are ignored with ``RuntimeWarning``. Ray backend requires ``ray.init()`` first.
@@ -87,16 +97,31 @@ def init(config: Mapping[str, Any] | None = None) -> None:
         return
 
     monitor_conf = load_monitor_config(config)
+    if not str(monitor_conf.server.service_ip).strip():
+        logger.error(
+            "RL-Insight service IP is required; set %s or server.service_ip in init config.",
+            MonitorEnv.SERVICE_IP,
+        )
+        return
     client = create_monitor_client(monitor_conf)
+    labels = {
+        key: value
+        for key, value in {
+            "project": project,
+            "experiment_name": experiment_name,
+        }.items()
+        if value is not None
+    }
     _STATE = _MonitorState(
         enabled=client is not None,
         client=client,
         conf=monitor_conf,
-        namespace=str(monitor_conf.namespace),
+        namespace=str(monitor_conf.server.namespace),
+        labels=labels,
     )
 
 
-def close() -> None:
+def finish() -> None:
     """Clear in-process monitor state so further emits are no-ops.
 
     Does not stop the hub HTTP server or kill the detached Ray actor.
@@ -157,7 +182,23 @@ def trace_state(
     state_lane_id: str | None = None,
     **labels: Any,
 ) -> Generator[None, None, None]:
-    """Record a named runtime state as one root span (useful for Grafana timeline views).
+    """Record a named runtime state as a timeline interval on a logical lane.
+
+    Each ``with trace_state(...)`` block becomes one state span. ``state_lane_id``
+    groups spans into timeline columns/lanes, so Grafana can show one row per
+    worker, replica, or process:
+
+    ``time ->        t0              t1              t2              t3              t4``
+    ``replica_0     | [generate responses---------------------------] [sync weights-----]``
+    ``replica_1     | [generate responses---------------------------] [sync weights-----]``
+    ``actor_worker_0   |       [compute logprob----] [update policy-----------------------]``
+    ``actor_worker_1   |       [compute logprob----] [update policy-----------------------]``
+    ``actor_worker_2   |       [compute logprob----] [update policy-----------------------]``
+    ``actor_worker_3   |       [compute logprob----] [update policy-----------------------]``
+    ``actor_worker_4   |       [compute logprob----] [update policy-----------------------]``
+    ``actor_worker_5   |       [compute logprob----] [update policy-----------------------]``
+    ``actor_worker_6   |       [compute logprob----] [update policy-----------------------]``
+    ``actor_worker_7   |       [compute logprob----] [update policy-----------------------]``
 
     Args:
         state_name: Span name and human-readable state label (e.g. ``"rollout"``).
@@ -274,7 +315,7 @@ def _emit(
         "name": name,
         "documentation": documentation,
         "value": value,
-        "labels": dict(labels),
+        "labels": {**_STATE.labels, **labels},
     }
     _STATE.client.apply_event(event)
 
@@ -292,12 +333,15 @@ def _emit_trace_span(
         name: Span name.
         start_time_ns: Span start (nanoseconds).
         end_time_ns: Span end (nanoseconds).
-        attributes: Span attributes; ``process_id`` is merged in before send.
+        attributes: Span attributes; ``process_id`` and init-level labels are merged in before send.
     """
     if not _STATE.enabled or _STATE.client is None:
         return
 
-    merged_attributes: dict[str, Any] = {"process_id": _STATE.process_id}
+    merged_attributes: dict[str, Any] = {
+        "process_id": _STATE.process_id,
+        **_STATE.labels,
+    }
     merged_attributes.update(attributes)
 
     event = {

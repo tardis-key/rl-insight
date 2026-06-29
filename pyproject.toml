@@ -42,15 +42,14 @@ include = ["rl_insight", "rl_insight.*", "experimental", "experimental.*"]
 experimental = [
   "config/*.yaml",
   "config/*.yml",
-  "config/*.ini",
-  "config/services/*.yaml",
-  "config/services/*.yml",
-  "config/services/*.ini",
-  "config/services/docker-compose-dev/*.yaml",
-  "config/services/docker-compose-dev/*.md",
-  "config/services/provisioning/datasources/*.yml",
-  "config/services/provisioning/dashboards/*.yml",
-  "config/services/dashboards/*.json",
+  "config/services/prometheus/*.yml",
+  "config/services/prometheus/*.yaml",
+  "config/services/tempo/*.yml",
+  "config/services/tempo/*.yaml",
+  "config/services/grafana/*.ini",
+  "config/services/grafana/provisioning/datasources/*.yml",
+  "config/services/grafana/provisioning/dashboards/*.yml",
+  "config/services/grafana/dashboards/*.json",
   "docs/*.md"
 ]
 

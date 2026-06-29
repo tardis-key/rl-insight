@@ -17,15 +17,14 @@
 from __future__ import annotations
 
 import argparse
-import os
 import socket
 import sys
 from typing import Sequence
-from urllib.parse import urlparse
 
 from omegaconf import DictConfig, OmegaConf
 
-from ..config import load_server_config_file
+from ..utils.monitor_config_loader import load_server_config_file
+from ..utils.constants import MonitorEnv
 from .dependencies import MissingDependencyError, ServiceStatus
 from .display import (
     active_state_rows,
@@ -159,8 +158,7 @@ class ServerCommands:
         if backend != "local":
             print(
                 f"Server backend {backend!r} is external; nothing to {action}. "
-                "Use the compose files under experimental/config/services/docker-compose-dev "
-                "for development-only Docker Compose startup."
+                "Manage the observability stack with your external deployment."
             )
             return False
 
@@ -180,11 +178,11 @@ class ServerConfigValidator:
                 conf, "prometheus.config_file", "Prometheus config file"
             )
 
-        traces_endpoint = self._select_str(conf, "otel.traces_endpoint")
+        traces_endpoint = ""
         if bool(OmegaConf.select(conf, "tempo.enable", default=True)):
-            traces_endpoint = self._require_field(
-                conf, "otel.traces_endpoint", "OTLP traces endpoint"
-            )
+            host = _server_host()
+            otel_port = self._require_int(conf, "otel.otel_port", "OTLP HTTP port")
+            traces_endpoint = f"http://{host}:{otel_port}/v1/traces"
             self._require_int(conf, "tempo.query_port", "Tempo query port")
             self._require_field(conf, "tempo.config_file", "Tempo config file")
 
@@ -229,9 +227,6 @@ class ServerConfigValidator:
 class ServerConsole:
     """Render concise terminal output for server commands."""
 
-    def __init__(self, host_resolver: HostResolver | None = None):
-        self.host_resolver = host_resolver or HostResolver()
-
     @staticmethod
     def print_dependencies(statuses: Sequence[ServiceStatus]) -> None:
         print(
@@ -264,8 +259,8 @@ class ServerConsole:
         conf: DictConfig,
         traces_endpoint: str,
     ) -> None:
-        host = self.host_resolver.advertised_host()
-        trainer_url = self.host_resolver.trainer_otlp_traces_url(host, traces_endpoint)
+        host = _server_host()
+        trainer_url = traces_endpoint.rstrip("/")
 
         print(format_logo())
         print(
@@ -288,8 +283,7 @@ class ServerConsole:
             )
         )
         print(
-            "Training side: set OTEL_EXPORTER_OTLP_TRACES_ENDPOINT to the OTLP "
-            "traces URL or pass otel.traces_endpoint to insight.init()."
+            f"Training side: set {MonitorEnv.SERVICE_IP} to the RL-Insight service IP."
         )
 
     def print_running_summary(
@@ -298,11 +292,11 @@ class ServerConsole:
         traces_endpoint: str,
         services: Sequence[StartedService],
     ) -> None:
-        host = self.host_resolver.advertised_host()
+        host = _server_host()
         grafana_url = ""
         if bool(OmegaConf.select(conf, "grafana.enable", default=True)):
             grafana_url = f"http://{host}:{int(conf.grafana.port)}"
-        trainer_url = self.host_resolver.trainer_otlp_traces_url(host, traces_endpoint)
+        trainer_url = traces_endpoint.rstrip("/")
         rows = [
             [service.name, service.process.pid, service.log_file]
             for service in services
@@ -321,51 +315,20 @@ class ServerConsole:
             print(f"View monitoring dashboard: {grafana_url}")
 
 
-class HostResolver:
-    """Resolve addresses shown to users and training processes."""
+def _server_host() -> str:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            host = sock.getsockname()[0]
+            if host and not host.startswith("127."):
+                return host
+    except OSError:
+        pass
 
-    @staticmethod
-    def trainer_otlp_traces_url(host: str, traces_endpoint: str) -> str:
-        """Resolve the trainer OTLP URL advertised to users."""
-        if "127.0.0.1" in traces_endpoint or "localhost" in traces_endpoint.lower():
-            port = HostResolver._otlp_http_publish_port(traces_endpoint)
-            return f"http://{host}:{port}/v1/traces".rstrip("/")
-        return traces_endpoint.rstrip("/")
-
-    @staticmethod
-    def advertised_host() -> str:
-        explicit = os.environ.get("RLINSIGHT_ADVERTISED_IP", "").strip()
-        if explicit:
-            return explicit
-
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-                sock.connect(("198.51.100.1", 1))
-                addr = sock.getsockname()[0]
-                if addr and not addr.startswith("127."):
-                    return addr
-        except OSError:
-            pass
-
-        try:
-            ip = socket.gethostbyname(socket.gethostname())
-            if ip and not ip.startswith("127."):
-                return ip
-        except OSError:
-            pass
-
-        return "127.0.0.1"
-
-    @staticmethod
-    def _otlp_http_publish_port(traces_endpoint: str) -> int:
-        raw = traces_endpoint.strip()
-        if not raw:
-            return 4318
-        if "://" not in raw:
-            raw = f"http://{raw}"
-        parsed = urlparse(raw)
-        if parsed.port is not None:
-            return int(parsed.port)
-        if parsed.scheme.lower() == "https":
-            return 443
-        return 4318
+    try:
+        host = socket.gethostbyname(socket.gethostname())
+        if host and not host.startswith("127."):
+            return host
+    except OSError:
+        pass
+    return "127.0.0.1"

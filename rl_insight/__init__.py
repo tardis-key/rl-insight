@@ -19,7 +19,7 @@ This package exposes built-in parser classes and a CLI entry helper.
 """
 
 from experimental import (
-    close,
+    finish,
     init,
     metric_count,
     metric_distribution,
@@ -44,7 +44,7 @@ __all__ = [
     "NvtxClusterParser",
     "main",
     "init",
-    "close",
+    "finish",
     "metric_count",
     "metric_value",
     "metric_distribution",

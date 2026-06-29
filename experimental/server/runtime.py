@@ -75,7 +75,12 @@ class LocalServiceRuntime:
         self.dependencies = dependencies or DependencyManager(conf, self.install_root)
         self.state_file = _state_file_from_config(self.conf)
 
-    def prepare_files(self, *, grafana_binary: Path | None = None) -> RuntimeFiles:
+    def prepare_files(
+        self,
+        *,
+        grafana_binary: Path | None = None,
+        tempo_version: str = "",
+    ) -> RuntimeFiles:
         """Render local runtime config files for Tempo and Grafana."""
         runtime_dir = _runtime_dir_from_config(self.conf)
         data_dir = _service_data_root(self.conf, self.install_root)
@@ -88,7 +93,9 @@ class LocalServiceRuntime:
         tempo_config = Path(str(OmegaConf.select(self.conf, "tempo.config_file")))
         grafana_config = Path(str(OmegaConf.select(self.conf, "grafana.config_file")))
         if bool(OmegaConf.select(self.conf, "tempo.enable", default=True)):
-            tempo_config = _render_tempo_config(self.conf, runtime_dir, data_dir)
+            tempo_config = _render_tempo_config(
+                self.conf, runtime_dir, data_dir, tempo_version
+            )
         if bool(OmegaConf.select(self.conf, "grafana.enable", default=True)):
             grafana_config = _render_grafana_config(self.conf, runtime_dir, data_dir)
             _render_grafana_provisioning(self.conf, runtime_dir)
@@ -112,9 +119,13 @@ class LocalServiceRuntime:
             raise MissingDependencyError(missing)
 
         status_by_name = {status.name: status for status in statuses}
+        tempo_status = status_by_name.get("tempo")
         grafana_status = status_by_name.get("grafana")
         grafana_binary = grafana_status.binary if grafana_status else None
-        runtime_files = self.prepare_files(grafana_binary=grafana_binary)
+        runtime_files = self.prepare_files(
+            grafana_binary=grafana_binary,
+            tempo_version=tempo_status.current_version if tempo_status else "",
+        )
         log_dir = (self.install_root / "logs").resolve()
         log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -317,12 +328,13 @@ def _service_data_root(conf: DictConfig, _install_root: Path) -> Path:
     return (DEFAULT_STATE_ROOT / "data").resolve()
 
 
-def _render_tempo_config(conf: DictConfig, runtime_dir: Path, data_root: Path) -> Path:
+def _render_tempo_config(
+    conf: DictConfig, runtime_dir: Path, data_root: Path, tempo_version: str
+) -> Path:
     source = Path(str(OmegaConf.select(conf, "tempo.config_file")))
     data = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
     query_port = int(OmegaConf.select(conf, "tempo.query_port"))
-    traces_endpoint = _select_str(conf, "otel.traces_endpoint")
-    otlp_port = _otlp_http_publish_port(traces_endpoint)
+    otlp_port = int(OmegaConf.select(conf, "otel.otel_port"))
     tempo_data = _service_specific_data_dir(conf, "tempo", data_root)
     tempo_data.mkdir(parents=True, exist_ok=True)
 
@@ -341,9 +353,7 @@ def _render_tempo_config(conf: DictConfig, runtime_dir: Path, data_root: Path) -
     trace.setdefault("wal", {})["path"] = str((tempo_data / "wal").resolve())
     retention_time = _select_str(conf, "tempo.retention_time")
     if retention_time:
-        data.setdefault("compactor", {}).setdefault("compaction", {})[
-            "block_retention"
-        ] = retention_time
+        _set_tempo_retention(data, retention_time, tempo_version)
 
     target = runtime_dir / "tempo.yaml"
     target.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
@@ -571,19 +581,37 @@ def _wait_or_kill(process: subprocess.Popen[Any]) -> None:
         return
 
 
-def _otlp_http_publish_port(traces_endpoint: str) -> int:
-    raw = traces_endpoint.strip()
-    if not raw:
-        return 4318
-    try:
-        from urllib.parse import urlparse
-
-        parsed = urlparse(raw if "://" in raw else f"http://{raw}")
-        return int(parsed.port or (443 if parsed.scheme == "https" else 4318))
-    except (TypeError, ValueError):
-        return 4318
-
-
 def _select_str(conf: DictConfig, key: str) -> str:
     value = OmegaConf.select(conf, key)
     return str(value).strip() if value is not None else ""
+
+
+def _set_tempo_retention(
+    data: dict[str, Any], retention_time: str, version: str
+) -> None:
+    retention = _tempo_duration(retention_time)
+    if _major_version(version) >= 3:
+        (
+            data.setdefault("backend_scheduler", {})
+            .setdefault("provider", {})
+            .setdefault("compaction", {})
+            .setdefault("compaction", {})
+        )["block_retention"] = retention
+        return
+    data.setdefault("compactor", {}).setdefault("compaction", {})["block_retention"] = (
+        retention
+    )
+
+
+def _tempo_duration(value: str) -> str:
+    raw = value.strip()
+    if raw.endswith("d") and raw[:-1].isdigit():
+        return f"{int(raw[:-1]) * 24}h"
+    return raw
+
+
+def _major_version(version: str) -> int:
+    try:
+        return int(version.split(".", 1)[0])
+    except (TypeError, ValueError):
+        return 0

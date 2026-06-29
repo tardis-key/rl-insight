@@ -24,13 +24,13 @@ from typing import Any, Mapping
 import ray
 import requests
 import yaml
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
+
+from .constants import PrometheusScrape
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.WARNING)
-
-PROMETHEUS_SCRAPE_JOB_NAME = "trainer_metrics"
 
 
 @ray.remote(num_cpus=0)
@@ -60,14 +60,13 @@ def _reload_prometheus_on_node(port: int, reload_url: str | None = None) -> None
 
 __all__ = [
     "MetricRegistry",
-    "PROMETHEUS_SCRAPE_JOB_NAME",
-    "merge_labels",
+    "PrometheusScrapeUpdater",
     "start_metrics_http_server",
     "update_prometheus_config",
 ]
 
 
-def merge_labels(
+def _merge_labels(
     defaults: Mapping[str, Any] | None, overrides: Mapping[str, Any] | None
 ) -> dict[str, str]:
     """Merge Prometheus label dicts with string keys/values; ``overrides`` wins on duplicate keys.
@@ -171,7 +170,7 @@ class MetricRegistry:
         labels: Mapping[str, Any] | None = None,
     ) -> None:
         """Increment a counter, merging ``defaults`` and ``labels`` into the label set."""
-        merged = merge_labels(defaults, labels)
+        merged = _merge_labels(defaults, labels)
         names = tuple(sorted(merged.keys()))
         counter = self._get_or_create_counter(name, documentation, names)
         if merged:
@@ -188,7 +187,7 @@ class MetricRegistry:
         labels: Mapping[str, Any] | None = None,
     ) -> None:
         """Set a gauge to ``value`` with merged labels."""
-        merged = merge_labels(defaults, labels)
+        merged = _merge_labels(defaults, labels)
         names = tuple(sorted(merged.keys()))
         gauge = self._get_or_create_gauge(name, documentation, names)
         if merged:
@@ -206,7 +205,7 @@ class MetricRegistry:
         buckets: tuple[float, ...] | None = None,
     ) -> None:
         """Observe ``value`` on a histogram with merged labels and optional ``buckets``."""
-        merged = merge_labels(defaults, labels)
+        merged = _merge_labels(defaults, labels)
         names = tuple(sorted(merged.keys()))
         histogram = self._get_or_create_histogram(name, documentation, names, buckets)
         if merged:
@@ -215,86 +214,104 @@ class MetricRegistry:
             histogram.observe(value)
 
 
+class PrometheusScrapeUpdater:
+    """Rewrite on-disk Prometheus scrape config and trigger ``/-/reload`` on each Ray node."""
+
+    def __init__(
+        self,
+        config: Mapping[str, Any] | DictConfig | None,
+        *,
+        job_name: str | None = None,
+    ) -> None:
+        from .monitor_config_loader import load_monitor_config
+
+        conf = load_monitor_config(config)
+        self._backend = (
+            str(OmegaConf.select(conf, "server.backend") or "ray").strip().lower()
+        )
+        self._job_name = job_name or PrometheusScrape.TRAINER_METRICS_JOB
+        self._prom_file = str(conf.prometheus.config_file)
+        self._reload_port = int(conf.prometheus.prometheus_port)
+
+    def update(self, server_addresses: list[str]) -> None:
+        """Rewrite on-disk Prometheus scrape config for ``server_addresses`` and POST ``/-/reload``.
+
+        Args:
+            server_addresses: ``host:port`` targets (typically the hub ``/metrics`` endpoints).
+
+        Note:
+            No-op unless ``server.backend`` is ``ray``; requires a running Ray cluster.
+        """
+        if not server_addresses:
+            logger.warning("No server addresses available to update Prometheus config")
+            return
+        if self._backend != "ray":
+            logger.warning(
+                "server.backend is %r; only %r supports Prometheus scrape update and reload.",
+                self._backend,
+                "ray",
+            )
+            return
+
+        try:
+            with open(self._prom_file, encoding="utf-8") as f:
+                prometheus_data = yaml.safe_load(f) or {}
+            scrape_configs = prometheus_data.setdefault("scrape_configs", [])
+            new_job = {
+                "job_name": self._job_name,
+                "static_configs": [{"targets": server_addresses}],
+            }
+            for i, sc in enumerate(scrape_configs):
+                if sc.get("job_name") == self._job_name:
+                    scrape_configs[i] = new_job
+                    break
+            else:
+                scrape_configs.append(new_job)
+        except Exception as e:
+            logger.error(
+                "Failed to read or merge Prometheus config %s: %s", self._prom_file, e
+            )
+            return
+
+        msg = (
+            f"Updated Prometheus configuration at {self._prom_file} with "
+            f"{len(server_addresses)} targets (job_name={self._job_name})"
+        )
+
+        try:
+            alive_nodes = [node for node in ray.nodes() if node["Alive"]]
+            ray.get(
+                [
+                    _write_prometheus_config_file.options(
+                        resources={"node:" + node["NodeManagerAddress"]: 0.001}
+                    ).remote(prometheus_data, self._prom_file)
+                    for node in alive_nodes
+                ]
+                + [
+                    _reload_prometheus_on_node.options(
+                        resources={"node:" + node["NodeManagerAddress"]: 0.001}
+                    ).remote(self._reload_port, None)
+                    for node in alive_nodes
+                ]
+            )
+            print(msg)
+        except Exception as e:
+            logger.error("Failed to update Prometheus configuration: %s", e)
+
+
 def update_prometheus_config(
     config: Mapping[str, Any] | DictConfig | None,
     server_addresses: list[str],
     job_name: str | None = None,
 ) -> None:
-    """Rewrite on-disk Prometheus scrape config for ``server_addresses`` and POST ``/-/reload`` on each Ray node.
+    """Rewrite on-disk Prometheus scrape config for ``server_addresses`` and POST ``/-/reload``.
 
     Args:
-        config: Trainer monitor config (or ``None`` for defaults); used for paths and ``reload.mode``.
+        config: Trainer monitor config (or ``None`` for defaults); used for paths and backend selection.
         server_addresses: ``host:port`` targets (typically the hub ``/metrics`` endpoints).
-        job_name: Override scrape job name; default uses ``PROMETHEUS_SCRAPE_JOB_NAME``.
+        job_name: Override scrape job name; default uses ``PrometheusScrape.TRAINER_METRICS_JOB``.
 
     Note:
-        No-op when ``prometheus.reload.mode`` is ``none`` or unsupported; requires a running Ray cluster for reload path.
+        No-op unless ``server.backend`` is ``ray``; requires a running Ray cluster.
     """
-    if not server_addresses:
-        logger.warning("No server addresses available to update Prometheus config")
-        return
-
-    from ..config.config import load_monitor_config
-
-    conf = load_monitor_config(config)
-    mode = str(conf.prometheus.reload.mode).strip().lower()
-    if mode == "none":
-        return
-    if mode != "ray":
-        logger.warning(
-            "prometheus.reload.mode is %r; only %r is supported. Skipping Prometheus scrape update and reload.",
-            mode,
-            "ray",
-        )
-        return
-
-    resolved_job = job_name or PROMETHEUS_SCRAPE_JOB_NAME
-    prom_file = str(conf.prometheus.config_file)
-    reload_port = int(conf.prometheus.prometheus_port)
-    reload_url = None
-
-    try:
-        with open(prom_file, encoding="utf-8") as f:
-            prometheus_data = yaml.safe_load(f) or {}
-        scrape_configs = prometheus_data.setdefault("scrape_configs", [])
-        new_job = {
-            "job_name": resolved_job,
-            "static_configs": [{"targets": server_addresses}],
-        }
-        for i, sc in enumerate(scrape_configs):
-            if sc.get("job_name") == resolved_job:
-                scrape_configs[i] = new_job
-                break
-        else:
-            scrape_configs.append(new_job)
-    except Exception as e:
-        logger.error("Failed to read or merge Prometheus config %s: %s", prom_file, e)
-        return
-
-    try:
-        alive_nodes = [node for node in ray.nodes() if node["Alive"]]
-        ray.get(
-            [
-                _write_prometheus_config_file.options(
-                    resources={"node:" + node["NodeManagerAddress"]: 0.001}
-                ).remote(prometheus_data, prom_file)
-                for node in alive_nodes
-            ]
-        )
-
-        print(
-            f"Updated Prometheus configuration at {prom_file} with {len(server_addresses)} targets "
-            f"(job_name={resolved_job})"
-        )
-
-        ray.get(
-            [
-                _reload_prometheus_on_node.options(
-                    resources={"node:" + node["NodeManagerAddress"]: 0.001}
-                ).remote(reload_port, reload_url)
-                for node in alive_nodes
-            ]
-        )
-
-    except Exception as e:
-        logger.error("Failed to update Prometheus configuration: %s", e)
+    PrometheusScrapeUpdater(config, job_name=job_name).update(server_addresses)

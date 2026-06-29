@@ -108,7 +108,7 @@ def _add_common_config_args(parser: argparse.ArgumentParser) -> None:
         "--config",
         type=Path,
         default=None,
-        help="Server YAML; default is bundled experimental/config/services/config.yaml.",
+        help="Server YAML; default is bundled experimental/config/config.yaml.",
     )
 
 

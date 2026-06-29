@@ -20,15 +20,16 @@ import logging
 from typing import Any, cast
 
 import ray
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 from ..collector.ray_monitor_hub import MonitorHubActor
-from ..config import MONITOR_HUB_ACTOR_NAME, MONITOR_RAY_NAMESPACE
+from ..utils.constants import MonitorRayActor
+from .base import MonitorClient
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
-__all__ = ["MonitorRayClient", "create_monitor_client", "get_or_create_monitor_hub"]
+__all__ = ["MonitorRayClient", "create_ray_monitor_client", "get_or_create_monitor_hub"]
 
 
 def get_or_create_monitor_hub(conf: DictConfig) -> Any:
@@ -43,13 +44,9 @@ def get_or_create_monitor_hub(conf: DictConfig) -> Any:
     Raises:
         RuntimeError: If Ray is not initialized.
     """
-    if not ray.is_initialized():
-        raise RuntimeError(
-            "Ray is not initialized. Call ray.init() before using monitor helpers."
-        )
 
-    actor_name = MONITOR_HUB_ACTOR_NAME
-    namespace = MONITOR_RAY_NAMESPACE
+    actor_name = MonitorRayActor.NAME
+    namespace = MonitorRayActor.NAMESPACE
 
     try:
         handle = ray.get_actor(actor_name, namespace=namespace)
@@ -66,9 +63,7 @@ def get_or_create_monitor_hub(conf: DictConfig) -> Any:
 
     try:
         actor_cls = cast(Any, MonitorHubActor)
-        return actor_cls.options(**actor_options).remote(
-            OmegaConf.to_container(conf, resolve=True)
-        )
+        return actor_cls.options(**actor_options).remote(conf)
     except ValueError:
         logger.info(
             "Monitor hub actor %r was created concurrently; connecting to it.",
@@ -77,7 +72,7 @@ def get_or_create_monitor_hub(conf: DictConfig) -> Any:
         return ray.get_actor(actor_name, namespace=namespace)
 
 
-def create_monitor_client(conf: DictConfig) -> "MonitorRayClient | None":
+def create_ray_monitor_client(conf: DictConfig) -> MonitorRayClient | None:
     """Build a client that talks to ``MonitorHubActor`` over Ray.
 
     Args:
@@ -94,7 +89,7 @@ def create_monitor_client(conf: DictConfig) -> "MonitorRayClient | None":
     return MonitorRayClient(handle)
 
 
-class MonitorRayClient:
+class MonitorRayClient(MonitorClient):
     """Ray facade: ``apply_event`` submits work to the hub without blocking on completion."""
 
     def __init__(self, actor_handle: Any) -> None:
@@ -108,7 +103,7 @@ class MonitorRayClient:
         """Submit ``MonitorHubActor.apply_event`` on the actor (fire-and-forget; no ``ray.get``).
 
         Args:
-            event: Serialized monitor event (see ``experimental.api`` helpers for shapes).
+            event: Serialized monitor event (see ``metric_*`` / ``trace_*`` helpers for shapes).
 
         Note:
             Errors on the hub side are not surfaced here. Ordering follows Ray actor scheduling.

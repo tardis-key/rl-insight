@@ -12,21 +12,69 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""String constants for monitor backends and event kinds."""
+"""Shared constants for RL-Insight online monitoring."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
+_EXPERIMENTAL_DIR = Path(__file__).resolve().parents[1]
+
+
+class MonitorPaths:
+    """Bundled monitor config and service file locations."""
+
+    CONFIG_DIR = _EXPERIMENTAL_DIR / "config"
+    CONFIG_FILE = CONFIG_DIR / "config.yaml"
+    SERVICES_DIR = CONFIG_DIR / "services"
+    PROMETHEUS_CONFIG_FILE = SERVICES_DIR / "prometheus" / "prometheus.yml"
+    TEMPO_CONFIG_FILE = SERVICES_DIR / "tempo" / "tempo.yaml"
+    GRAFANA_CONFIG_FILE = SERVICES_DIR / "grafana" / "grafana.ini"
+    GRAFANA_PROVISIONING_DIR = SERVICES_DIR / "grafana" / "provisioning"
+    GRAFANA_DASHBOARDS_DIR = SERVICES_DIR / "grafana" / "dashboards"
+
+
+class MonitorRayActor:
+    """Ray placement metadata for the detached monitor hub actor."""
+
+    NAME = "RLInsightMonitorHub"
+    NAMESPACE = "rl-insight-monitor"
+
+
+class MonitorEnv:
+    """Environment variable names used by trainer-side monitor config overrides."""
+
+    SERVICE_IP = "RL_INSIGHT_SERVICE_IP"
+    OTEL_PORT = "RL_INSIGHT_OTEL_PORT"
+    PROMETHEUS_PORT = "RL_INSIGHT_PROMETHEUS_PORT"
+    PROMETHEUS_CONFIG_FILE = "RL_INSIGHT_PROMETHEUS_CONFIG_FILE"
+
+
+class MonitorDefaults:
+    """Default trainer monitor config values."""
+
+    NAMESPACE = "rl_insight_monitor"
+    METRICS_REPORT_PORT = 9092
+    PROMETHEUS_PORT = 9090
+    OTEL_PORT = 4318
+
 
 class MonitorBackend:
-    """Supported monitor transport implementations (``create_monitor_client`` dispatches on ``type``)."""
+    """Supported trainer-side monitor client backends (``server.backend`` registry keys)."""
 
     RAY = "ray"
 
 
 class MonitorEventKind:
-    """String ``kind`` field on events sent through ``MonitorHubActor.apply_event``."""
+    """String ``kind`` field on events sent through monitor collectors."""
 
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
     TRACE = "trace"
+
+
+class PrometheusScrape:
+    """Prometheus scrape job names managed by the monitor hub."""
+
+    TRAINER_METRICS_JOB = "trainer_metrics"

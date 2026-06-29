@@ -126,7 +126,7 @@ Collected Prometheus, Tempo, and Grafana data is persisted under `~/.rl-insight/
 ```python
 import rl_insight as insight
 
-insight.init()
+insight.init(project="verl", experiment_name="ppo-smoke-test")
 insight.metric_count("train_step_total", amount=1)
 insight.metric_value("reward_mean", value=1.23)
 
