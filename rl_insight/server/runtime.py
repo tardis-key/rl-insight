@@ -20,6 +20,7 @@ import configparser
 import datetime as _dt
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -98,7 +99,8 @@ class LocalServiceRuntime:
             )
         if bool(OmegaConf.select(self.conf, "grafana.enable", default=True)):
             grafana_config = _render_grafana_config(self.conf, runtime_dir, data_dir)
-            _render_grafana_provisioning(self.conf, runtime_dir)
+            dashboard_path = _stage_grafana_dashboards(self.conf, runtime_dir)
+            _render_grafana_provisioning(self.conf, runtime_dir, dashboard_path)
 
         return RuntimeFiles(
             prometheus_config=prometheus_config,
@@ -393,7 +395,9 @@ def _render_grafana_config(
     return target
 
 
-def _render_grafana_provisioning(conf: DictConfig, runtime_dir: Path) -> None:
+def _render_grafana_provisioning(
+    conf: DictConfig, runtime_dir: Path, dashboard_path: Path
+) -> None:
     provisioning = runtime_dir / "provisioning"
     datasources_dir = provisioning / "datasources"
     dashboards_dir = provisioning / "dashboards"
@@ -435,9 +439,6 @@ def _render_grafana_provisioning(conf: DictConfig, runtime_dir: Path) -> None:
         yaml.safe_dump(datasource_data, sort_keys=False), encoding="utf-8"
     )
 
-    dashboard_path = Path(
-        str(OmegaConf.select(conf, "grafana.dashboards_dir"))
-    ).resolve()
     dashboard_data = {
         "apiVersion": 1,
         "providers": [
@@ -456,6 +457,30 @@ def _render_grafana_provisioning(conf: DictConfig, runtime_dir: Path) -> None:
     (dashboards_dir / "default.yml").write_text(
         yaml.safe_dump(dashboard_data, sort_keys=False), encoding="utf-8"
     )
+
+
+def _stage_grafana_dashboards(conf: DictConfig, runtime_dir: Path) -> Path:
+    source = Path(str(OmegaConf.select(conf, "grafana.dashboards_dir"))).resolve()
+    target = (runtime_dir / "dashboards").resolve()
+    if source == target:
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+
+    target.mkdir(parents=True, exist_ok=True)
+
+    if not source.exists():
+        return target
+    for item in source.iterdir():
+        destination = target / item.name
+        if item.is_file():
+            if destination.is_dir():
+                continue
+            shutil.copy2(item, destination)
+        elif item.is_dir():
+            if destination.exists() and not destination.is_dir():
+                continue
+            shutil.copytree(item, destination, dirs_exist_ok=True)
+    return target
 
 
 def _service_specific_data_dir(conf: DictConfig, name: str, data_root: Path) -> Path:

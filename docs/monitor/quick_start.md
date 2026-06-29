@@ -119,13 +119,19 @@ password: admin
 
 After login, open **Dashboards** from the left navigation and choose `RL-Insight`. For the sample script in this guide, select the `quick_start_demo` dashboard and set the time range to a recent window such as **Last 5 minutes** while the script is still running. For framework-specific runs, open the dashboard that matches that integration or experiment.
 
-The bundled provisioning config loads Prometheus and Tempo datasources and dashboard JSON files from:
+Bundled dashboard JSON files live in the package directory:
 
 ```text
 rl_insight/config/services/grafana/dashboards
 ```
 
-If you add or update a dashboard JSON file such as `quick_start_demo.json`, place it in that dashboards directory before starting Grafana, or restart the stack so Grafana provisions the latest file. Prometheus metrics and Tempo traces are persisted under `~/.rl-insight/data` by default. Stopping the server does not delete collected data.
+At startup, RL-Insight copies them into the runtime dashboards directory and provisions Grafana from there:
+
+```text
+~/.rl-insight/runtime/dashboards
+```
+
+If you add or update a dashboard JSON file such as `quick_start_demo.json`, place it in the bundled dashboards directory before starting Grafana, or restart the stack so RL-Insight copies the latest file into the runtime directory and Grafana provisions it. Prometheus metrics and Tempo traces are persisted under `~/.rl-insight/data` by default. Stopping the server does not delete collected data.
 
 ## 6. Stop Services
 
