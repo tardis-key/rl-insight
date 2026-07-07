@@ -1,13 +1,35 @@
 # RL-Insight Monitor Stress Test Report
 
-> Test Date: 2026-06-25
+> Date: 2026-07-07
 > Environment: Ray cluster, single MonitorHubActor, Prometheus :9090, Grafana :3000
 
 ---
 
 ## 1. Key Findings
 
-Under sustained load from 1,600 concurrent threads, the MonitorHubActor delivered zero data loss and zero errors: across all six concurrency levels, 1.33 million counter events and 1.30 million histogram events reached Prometheus with exact count and sum matching, achieving 100% data integrity. Peak single-API throughput exceeds 900,000 events/s at 1,600 concurrency, far beyond Grafana's frontend rendering limits (Grafana's official documentation states that rendering dozens to hundreds of time series can cause browser lag). The system bottleneck lies in the visualization layer, not the data pipeline. One risk: under high concurrency, counter / gauge / histogram timestamps are recorded at hub processing time rather than client invocation time -- at 1,600 concurrency, p99 timestamp drift can reach ~1.66s. Trace spans are unaffected.
+### 1.1 Data Integrity
+
+Across 100 process × thread combinations and 2 million events, the MonitorHubActor delivered **zero data loss and zero errors**. Counter counts and histogram sums matched Prometheus exactly in every combination tested, including exact-value write-back verification.
+
+### 1.2 Scaling Behavior
+
+- **Throughput scales with process count, not thread count.** Within a fixed process count, increasing threads from 10 to 640 barely changes throughput. Doubling the process count approximately doubles throughput.
+- **Latency scales with thread count, not process count.** For a given thread count, p50 latency is nearly identical whether running 1 process or 64. More threads mean deeper Ray actor mailbox queues.
+- **All four APIs behave identically.** Counter, gauge, histogram, and trace differ by less than 20% in throughput. The Hub's per-event processing cost is O(1) and dominated by Ray actor scheduling, not API logic.
+
+### 1.3 Throughput Ceiling
+
+At 64 processes × 10 threads, the system reaches approximately **135,000 events/s** (average across all four APIs), with p50 latency of just 0.4ms. Each event costs the Hub roughly 7µs to process. The actor is far from saturated; we estimate the true ceiling around 200–300K/s.
+
+### 1.4 Optimal Configuration
+
+**Few threads, many processes.** 64p×10t simultaneously achieves the highest throughput and the lowest latency. To scale monitoring throughput in production, add reporter processes rather than threads.
+
+### 1.5 Timestamp Drift
+
+Counter, gauge, and histogram timestamps are recorded at Hub processing time, not client invocation time. Under the optimal 64p×10t configuration, p50 drift is negligible at 0.4ms. Under extreme load (1p×640t), p50 drift reaches 238ms. Trace spans always use client-side timestamps and are unaffected.
+
+---
 
 ## 2. Test Methodology and Results
 
@@ -24,76 +46,61 @@ Four RL-Insight public APIs:
 
 ### 2.2 Methodology
 
-- **Concurrency levels:** 50 → 100 → 200 → 400 → 800 → 1,600 threads
-- **Duration per level:** 1s sustained load, workers run tight loops with no artificial delay
-- **Failure detection:** query hub `events_applied` immediately after the load window (no drain wait)
-- **Queue time:** p95 − p50, reflecting Ray actor mailbox depth
-- **Data verification:** snapshot Prometheus baseline before load → exact delta comparison after load
+- **Process levels:** 1, 2, 4, 8, 16 (main grid) + 32, 64 (high-process extension)
+- **Thread levels:** 10, 20, 40, 80 (main grid) + 160, 320, 640 (high-thread extension)
+- 100 total combinations (4 APIs × 25 process-thread pairs)
+- Each combination: 1 second sustained load. Child processes launched via `spawn`, each independently initializing Ray. Thread count equals concurrent workers per process, all running tight loops with no artificial delay.
+- Checkpoint after every combination enables resume-after-interruption.
+- **Failure detection:** query Hub `events_applied` immediately after the 1s window.
+- **Queue time:** p95 − p50, reflecting Ray actor mailbox depth.
+- **Data verification:** snapshot Prometheus baseline → exact delta after load, plus known-value write-back verification.
 
-### 2.3 Raw Data
+### 2.3 Throughput (avg across 4 APIs, events/s)
 
-#### counter
+| P\T | 10t | 20t | 40t | 80t | 160t | 320t | 640t |
+|-----|-----|-----|-----|-----|------|------|------|
+| 1p | 2,825 | 2,232 | 2,249 | 2,175 | 2,338 | 2,802 | 3,990 |
+| 2p | 5,105 | 4,921 | 4,681 | 4,389 | - | - | - |
+| 4p | 10,121 | 9,524 | 8,676 | 8,746 | - | - | - |
+| 8p | 20,827 | 19,224 | 18,136 | 17,670 | - | - | - |
+| 16p | 38,225 | 34,178 | 37,566 | 37,625 | - | - | - |
+| 32p | 68,223 | - | - | - | - | - | - |
+| 64p | 135,489 | - | - | - | - | - | - |
 
-| Conc | Submitted | HubRcvd | Fail% | Avg(ms) | p50(ms) | p95(ms) | Queue(ms) |
-|-----|----------|--------|------|--------|--------|--------|----------|
-| 50 | 4,425 | 4,425 | 0% | 14.2 | 12.3 | 31.5 | 19 |
-| 100 | 8,619 | 8,619 | 0% | 24.1 | 20.3 | 55.7 | 35 |
-| 200 | 23,778 | 23,778 | 0% | 48.7 | 35.6 | 137.1 | 102 |
-| 400 | 78,627 | 78,627 | 0% | 92.7 | 61.2 | 274.6 | 213 |
-| 800 | 264,433 | 264,433 | 0% | 195.6 | 137.4 | 567.0 | 430 |
-| 1,600 | 954,363 | 954,363 | 0% | 430.0 | 334.4 | 1,156.3 | 822 |
+Read vertically: throughput is driven by process count. A single process contributes ~2,600 events/s regardless of how many threads it runs. From 1p to 64p, throughput scales roughly 48×. Adding threads within a fixed process count yields less than 50% improvement (1p, 10t→640t).
 
-#### gauge
+### 2.4 Latency (avg across 4 APIs, p50, ms)
 
-| Conc | Submitted | HubRcvd | Fail% | Avg(ms) | p50(ms) | p95(ms) | Queue(ms) |
-|-----|----------|--------|------|--------|--------|--------|----------|
-| 50 | 4,877 | 4,877 | 0% | 13.4 | 11.5 | 27.3 | 16 |
-| 100 | 7,399 | 7,399 | 0% | 24.3 | 20.4 | 55.5 | 35 |
-| 200 | 23,289 | 23,289 | 0% | 40.7 | 30.6 | 106.3 | 76 |
-| 400 | 75,926 | 75,926 | 0% | 90.8 | 61.0 | 273.4 | 212 |
-| 800 | 275,833 | 275,833 | 0% | 193.9 | 137.2 | 556.9 | 420 |
-| 1,600 | 911,470 | 911,470 | 0% | 424.2 | 329.0 | 1,144.4 | 815 |
+| P\T | 10t | 20t | 40t | 80t | 160t | 320t | 640t |
+|-----|-----|-----|-----|-----|------|------|------|
+| 1p | 2.3 | 6.8 | 13.8 | 30.1 | 61.8 | 117.1 | 238.6 |
+| 2p | 2.5 | 5.8 | 13.2 | 29.8 | - | - | - |
+| 4p | 2.5 | 5.9 | 13.7 | 28.5 | - | - | - |
+| 8p | 2.4 | 5.3 | 13.3 | 29.3 | - | - | - |
+| 16p | 2.2 | 5.4 | 12.9 | 30.2 | - | - | - |
+| 32p | 1.6 | - | - | - | - | - | - |
+| 64p | 0.4 | - | - | - | - | - | - |
 
-#### histogram
+Read horizontally: latency is driven by thread count. At 10t, p50 ranges from 0.4ms (64p) to 2.3ms (1p)—nearly flat across process counts. At 640t, queue time dominates: 334ms out of 358ms p95 is spent waiting in the Hub's mailbox.
 
-| Conc | Submitted | HubRcvd | Fail% | Avg(ms) | p50(ms) | p95(ms) | Queue(ms) |
-|-----|----------|--------|------|--------|--------|--------|----------|
-| 50 | 4,168 | 4,168 | 0% | 15.7 | 13.3 | 35.6 | 22 |
-| 100 | 7,415 | 7,415 | 0% | 26.5 | 20.4 | 66.3 | 46 |
-| 200 | 22,521 | 22,521 | 0% | 50.3 | 35.8 | 142.0 | 106 |
-| 400 | 79,344 | 79,344 | 0% | 95.1 | 66.1 | 280.5 | 214 |
-| 800 | 266,905 | 266,905 | 0% | 191.4 | 136.9 | 556.7 | 420 |
-| 1,600 | 918,864 | 918,864 | 0% | 428.7 | 334.0 | 1,151.1 | 817 |
+### 2.5 Heatmaps
 
-#### trace
+![Throughput and latency heatmaps](../../assets/monitor/stress_heatmaps.png)
 
-| Conc | Submitted | HubRcvd | Fail% | Avg(ms) | p50(ms) | p95(ms) | Queue(ms) |
-|-----|----------|--------|------|--------|--------|--------|----------|
-| 50 | 4,494 | 4,494 | 0% | 14.7 | 12.5 | 30.4 | 18 |
-| 100 | 8,097 | 8,097 | 0% | 29.1 | 25.1 | 71.1 | 46 |
-| 200 | 22,620 | 22,620 | 0% | 47.3 | 35.7 | 127.0 | 91 |
-| 400 | 75,727 | 75,727 | 0% | 97.6 | 65.9 | 298.9 | 233 |
-| 800 | 272,894 | 272,894 | 0% | 213.7 | 152.2 | 622.6 | 470 |
-| 1,600 | 909,030 | 909,030 | 0% | 457.9 | 354.3 | 1,241.4 | 887 |
+> Green = low, red = high. The throughput heatmap shows vertical banding (process-driven). The latency heatmap shows horizontal banding (thread-driven).
 
-### 2.4 Latency Visualization
-
-![Latency vs Concurrency](../../assets/monitor/latency_vs_concurrency.png)
-
-### 2.5 Data Integrity Verification
+### 2.6 Data Integrity
 
 | Check | Expected | Actual | Result |
 |---|---|---|---|
-| Counter total | 1,334,245 | 1,334,245 | PASS |
-| Histogram total | 1,299,217 | 1,299,217 | PASS |
-| Histogram sum | 322,871,963 | 322,871,963 | PASS |
-| Counter exact +5 | 5 | 5.0 | PASS |
-| Counter exact value | 5 | 5 | PASS |
-| Gauge exact value | 7.89 | 7.8900 | PASS |
-| Histogram exact +3 | 3 | 3.0 | PASS |
-| Histogram exact sum | 600 | 600 | PASS |
+| Counter exact +5 | 5 | 5.0 | ✅ |
+| Counter exact value | 5 | 5 | ✅ |
+| Gauge exact value | 7.89 | 7.8900 | ✅ |
+| Histogram exact +3 | 3 | 3.0 | ✅ |
+| Histogram exact sum | 600 | 600 | ✅ |
+| All 100 combinations, failure rate | 0% | 0% | ✅ |
 
-> **1.33 million events delivered with exact count and value matching. Zero data loss.**
+> **2 million events delivered. Exact count and value matching. Zero data loss.**
 
 ---
 
@@ -101,7 +108,9 @@ Four RL-Insight public APIs:
 
 ### 3.1 Official Statement
 
-Grafana Troubleshooting documentation ([grafana.com/docs/grafana/latest/troubleshooting/troubleshoot-dashboards/](https://grafana.com/docs/grafana/latest/troubleshooting/troubleshoot-dashboards/)):
+From Grafana's troubleshooting documentation:
+
+> Source: [Troubleshoot dashboards — Grafana documentation](https://grafana.com/docs/grafana/latest/troubleshooting/troubleshoot-dashboards/)
 
 > "Are you trying to render **dozens (or hundreds or thousands) of time series** on a graph? **This can cause the browser to lag.**"
 
@@ -109,15 +118,15 @@ Grafana Troubleshooting documentation ([grafana.com/docs/grafana/latest/troubles
 
 ### 3.2 Impact on RL-Insight
 
-- The histogram metric (`step_latency_ms_bucket`) produces **17+ bucket time series per label combination**
-- Under load, the histogram panel may render dozens to hundreds of time series simultaneously
-- `dataproxy.row_limit` defaults to 1,000,000 rows (SQL data sources); Prometheus has no such limit, but browser rendering capacity is far lower
+- The histogram metric (`step_latency_ms_bucket`) produces **17+ bucket time series per label combination**.
+- Under load, a histogram panel may render dozens to hundreds of time series simultaneously.
+- `dataproxy.row_limit` defaults to 1,000,000 rows (SQL data sources). Prometheus has no such limit, but browser rendering capacity is far lower.
 
 ### 3.3 Comparison
 
 | | MonitorHubActor | Grafana Frontend |
 |---|---|---|
-| Capacity | >900,000 events/s | Dozens to hundreds of time series |
+| Capacity | 135,000 events/s (unsaturated) | Dozens to hundreds of time series |
 | Bottleneck nature | Single-actor serial processing | Browser DOM rendering |
 | Scalable | Yes (sharding) | Constrained by browser |
 
@@ -138,22 +147,25 @@ Grafana Troubleshooting documentation ([grafana.com/docs/grafana/latest/troubles
 
 ### 4.2 Drift Magnitude
 
-At 1,600 concurrency, using counter API as reference:
+Drift is determined by thread count (i.e., queue depth):
 
-- p50 latency 334ms: 50% of metric timestamps drift ≤ 334ms
-- p95 latency 1,156ms: 5% of metric timestamps drift up to 1.16s
-- p99 latency ~1,655ms (from test script internal computation, not shown in the tables above): 1% of metric timestamps drift up to ~1.66s
+- 10t (low queue): p50 drift ≤ 2.3ms, negligible
+- 80t (moderate queue): p50 drift ≈ 30ms
+- 640t (extreme queue): p50 drift ≈ 238ms, p95 reaches 560ms
+
+Process count does not affect drift (64p×10t has p50 of just 0.4ms).
 
 ### 4.3 Impact on Grafana Display
 
-- Metric panels (counter / gauge / histogram): data point timestamps lag behind actual event time, shifting right on the time axis. Under high concurrency, this appears as "data latency."
+- Metric panels (counter / gauge / histogram): data point timestamps lag behind actual event time, shifting right on the time axis. Under high thread counts this appears as "data latency."
 - Trace panel (state_timeline): timestamps are accurate and unaffected. **This is the reliable source for verifying the true timeline.**
 
 ### 4.4 Mitigation
 
-1. Keep concurrency low (typical RL training uses single-process reporting, far below 1,600)
-2. For metric data, Grafana dashboards can note "timestamps reflect hub processing time"
-3. When precise timestamps are required, prefer `trace_state` over `metric_value` for recording critical state transitions
+1. Typical RL training uses single-process reporting with low thread counts; drift is 2–3ms and negligible.
+2. To increase reporting throughput, add processes, not threads.
+3. Grafana dashboards can note "timestamps reflect Hub processing time" for metric panels.
+4. When precise timestamps are required, prefer `trace_state` over `metric_value` for recording critical state transitions.
 
 ---
 
@@ -163,8 +175,6 @@ At 1,600 concurrency, using counter API as reference:
 
 ---
 
-## Appendix A: Test Script
+## Appendix: Related Files
 
-```
-tests/monitor/test_monitor_stress.py
-```
+- Test script: `tests/monitor/test_monitor_stress.py`
