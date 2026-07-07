@@ -1,4 +1,4 @@
-name: monitor_smoke_test
+name: Special E2e Monitor Smoke Test
 
 on:
   push:
@@ -14,7 +14,7 @@ on:
       - .github/workflows/monitor_smoke_test.yml
       - "rl_insight/server/**"
       - "rl_insight/config/services/**"
-      - "tests/monitor/**"
+      - "tests/monitor/special_e2e/**"
       - "docs/monitor/**"
 
 concurrency:
@@ -25,7 +25,7 @@ permissions:
   contents: read
 
 jobs:
-  monitor_smoke_test:
+  special_e2e_monitor_smoke_test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -93,7 +93,7 @@ jobs:
 
       - name: Run monitor smoke test
         run: |
-          python tests/monitor/test_monitor_smoke.py
+          python tests/monitor/special_e2e/test_monitor_smoke.py
 
       - name: Verify metrics in Prometheus
         run: |
