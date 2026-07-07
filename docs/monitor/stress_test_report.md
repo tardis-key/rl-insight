@@ -85,7 +85,7 @@ Read horizontally: latency is driven by thread count. At 10t, p50 ranges from 0.
 
 ### 2.5 Heatmaps
 
-![Throughput and latency heatmaps](../../assets/monitor/stress_heatmaps.png)
+![Throughput and latency heatmaps](../../assets/monitor/stress_heatmap.png)
 
 > Green = low, red = high. The throughput heatmap shows vertical banding (process-driven). The latency heatmap shows horizontal banding (thread-driven).
 
@@ -178,3 +178,4 @@ Process count does not affect drift (64p×10t has p50 of just 0.4ms).
 ## Appendix: Related Files
 
 - Test script: `tests/monitor/test_monitor_stress.py`
+
