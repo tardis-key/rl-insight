@@ -29,7 +29,9 @@ import rl_insight as insight
 
 def main() -> None:
     """Run a finite instrumentation loop for smoke-testing the monitor stack."""
-    server_url = os.environ.get("RL_INSIGHT_SERVER_URL", "http://127.0.0.1:18080")
+    server_url = os.environ.setdefault(
+        "RL_INSIGHT_SERVER_URL", "http://127.0.0.1:18080"
+    )
 
     ray.init(namespace="rl-insight-monitor", ignore_reinit_error=True)
     insight.init(project="verl", experiment_name="monitor_smoke_test")
@@ -37,7 +39,9 @@ def main() -> None:
     labels = {"worker": "trainer_0"}
     num_iterations = 10
 
-    print(f"Running {num_iterations} instrumentation iterations against {server_url}...")
+    print(
+        f"Running {num_iterations} instrumentation iterations against {server_url}..."
+    )
 
     for step in range(num_iterations):
         with insight.trace_state(
