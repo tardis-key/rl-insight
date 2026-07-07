@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 verl-project authors.
+#
 """RL-Insight stress / concurrency API test.
 
 Tests all combinations of process count × thread count:
@@ -24,7 +26,6 @@ Run from the repo root:
 
 from __future__ import annotations
 
-import concurrent.futures
 import json
 import math
 import os
@@ -35,7 +36,7 @@ import multiprocessing as mp
 import time
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import ray
 import rl_insight as insight
@@ -107,11 +108,12 @@ class LatencyStats:
         if not samples:
             return cls()
         s = sorted(samples)
-        n = len(s)
         p50 = _pct(s, 50)
         p95 = _pct(s, 95)
         return cls(
-            p50=p50, p95=p95, p99=_pct(s, 99),
+            p50=p50,
+            p95=p95,
+            p99=_pct(s, 99),
             avg=statistics.mean(s),
             queue_ms=max(0.0, (p95 - p50) * 1000),
         )
@@ -199,7 +201,9 @@ def _prometheus_has_data(service_ip: str, query: str) -> bool:
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read())
-        return data.get("status") == "success" and bool(data.get("data", {}).get("result"))
+        return data.get("status") == "success" and bool(
+            data.get("data", {}).get("result")
+        )
     except Exception:
         return False
 
@@ -231,7 +235,6 @@ def _process_worker(
     Runs in a spawned subprocess, so all imports and init must be self-contained.
     """
     import os
-    import threading
     import time as _time
     from concurrent.futures import ThreadPoolExecutor
 
@@ -240,38 +243,55 @@ def _process_worker(
 
     # Init Ray in this child process
     try:
-        _ray.init(address="auto", namespace="rl-insight-monitor", ignore_reinit_error=True)
+        _ray.init(
+            address="auto", namespace="rl-insight-monitor", ignore_reinit_error=True
+        )
     except ConnectionError:
         _ray.init(namespace="rl-insight-monitor", ignore_reinit_error=True)
 
-    _service_ip = os.environ.get("RL_INSIGHT_SERVICE_IP", "127.0.0.1").strip() or "127.0.0.1"
+    _service_ip = (
+        os.environ.get("RL_INSIGHT_SERVICE_IP", "127.0.0.1").strip() or "127.0.0.1"
+    )
     _insight.init(
-        project="verl", experiment_name="ppo-stress-test",
+        project="verl",
+        experiment_name="ppo-stress-test",
         config={"server": {"service_ip": _service_ip}},
     )
 
     # Build emitter from api_name (lambdas cannot be pickled across spawn)
     if api_name == "counter":
+
         def _emit(seq: int) -> None:
             _insight.metric_count(
-                "train_step_total", amount=1,
-                documentation="Counter: total training steps", worker="stress",
+                "train_step_total",
+                amount=1,
+                documentation="Counter: total training steps",
+                worker="stress",
             )
     elif api_name == "gauge":
+
         def _emit(seq: int) -> None:
             _insight.metric_value(
-                "reward_mean", value=float(seq % 1000),
-                documentation="Gauge: mean reward value", worker="stress",
+                "reward_mean",
+                value=float(seq % 1000),
+                documentation="Gauge: mean reward value",
+                worker="stress",
             )
     elif api_name == "histogram":
+
         def _emit(seq: int) -> None:
             _insight.metric_distribution(
-                "step_latency_ms", value=float(200 + seq % 100),
-                documentation="Histogram: step latency in ms", worker="stress",
+                "step_latency_ms",
+                value=float(200 + seq % 100),
+                documentation="Histogram: step latency in ms",
+                worker="stress",
             )
     elif api_name == "trace":
+
         def _emit(seq: int) -> None:
-            with _insight.trace_state("rollout_generate", state_lane_id="stress", step=seq):
+            with _insight.trace_state(
+                "rollout_generate", state_lane_id="stress", step=seq
+            ):
                 pass
     else:
         result_queue.put({"submitted": 0, "submitted_sum": 0.0, "latencies": []})
@@ -279,6 +299,7 @@ def _process_worker(
 
     # Histogram sum helper (local copy for child process)
     if track_sum:
+
         def _hist_sum(n: int) -> float:
             k, r = divmod(n, 100)
             cycle_sum = k * 4950 + r * (r - 1) // 2
@@ -318,11 +339,13 @@ def _process_worker(
     if track_sum:
         submitted_sum = sum(_hist_sum(n) for n in worker_counts)
 
-    result_queue.put({
-        "submitted": submitted,
-        "submitted_sum": submitted_sum,
-        "latencies": all_latencies,
-    })
+    result_queue.put(
+        {
+            "submitted": submitted,
+            "submitted_sum": submitted_sum,
+            "latencies": all_latencies,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -397,15 +420,17 @@ def run_concurrency_test(
 
 def _fmt_lat(lat: LatencyStats) -> str:
     return (
-        f"avg={lat.avg*1000:.1f}ms  "
-        f"p50={lat.p50*1000:.1f}ms  "
-        f"p95={lat.p95*1000:.1f}ms  "
+        f"avg={lat.avg * 1000:.1f}ms  "
+        f"p50={lat.p50 * 1000:.1f}ms  "
+        f"p95={lat.p95 * 1000:.1f}ms  "
         f"queue={lat.queue_ms:.0f}ms"
     )
 
 
 def print_header() -> None:
-    print(f"\n{'API':<12} {'P':>3} {'T':>3}  {'Submitted':>10} {'HubRcvd':>8}  {'Fail%':>6}  {'Avg(ms)':>8}  {'Queue(ms)':>10}  {'Thru/s':>10}")
+    print(
+        f"\n{'API':<12} {'P':>3} {'T':>3}  {'Submitted':>10} {'HubRcvd':>8}  {'Fail%':>6}  {'Avg(ms)':>8}  {'Queue(ms)':>10}  {'Thru/s':>10}"
+    )
     print("-" * 104)
 
 
@@ -414,7 +439,7 @@ def print_row(r: ConcurrencyResult) -> None:
     print(
         f"{r.api_name:<12} {r.num_procs:>3} {r.num_threads:>3}  "
         f"{r.submitted:>10} {r.hub_delta:>8}  "
-        f"{r.failure_rate:>5.1%}  {r.latency.avg*1000:>7.1f}ms  "
+        f"{r.failure_rate:>5.1%}  {r.latency.avg * 1000:>7.1f}ms  "
         f"{r.latency.queue_ms:>9.0f}  {r.throughput_per_sec:>10.0f}{tag}"
     )
 
@@ -423,7 +448,9 @@ def print_api_summary(all_results: list[ConcurrencyResult]) -> None:
     print(f"\n{'=' * 70}")
     print("  Per-API Latency Breakdown (highest load combination)")
     print(f"{'=' * 70}")
-    print(f"{'API':<14} {'P':>3} {'T':>3} {'Avg(ms)':>9} {'p50(ms)':>9} {'p95(ms)':>9} {'Queue(ms)':>10}  {'Thru/s':>10}")
+    print(
+        f"{'API':<14} {'P':>3} {'T':>3} {'Avg(ms)':>9} {'p50(ms)':>9} {'p95(ms)':>9} {'Queue(ms)':>10}  {'Thru/s':>10}"
+    )
     print("-" * 79)
     for api_name in ["counter", "gauge", "histogram", "trace"]:
         api_results = [r for r in all_results if r.api_name == api_name]
@@ -434,8 +461,8 @@ def print_api_summary(all_results: list[ConcurrencyResult]) -> None:
         lat = best.latency
         print(
             f"{api_name:<14} {best.num_procs:>3} {best.num_threads:>3} "
-            f"{lat.avg*1000:>8.1f} {lat.p50*1000:>8.1f} "
-            f"{lat.p95*1000:>8.1f} {lat.queue_ms:>9.0f}  {best.throughput_per_sec:>10.0f}"
+            f"{lat.avg * 1000:>8.1f} {lat.p50 * 1000:>8.1f} "
+            f"{lat.p95 * 1000:>8.1f} {lat.queue_ms:>9.0f}  {best.throughput_per_sec:>10.0f}"
         )
 
 
@@ -443,7 +470,9 @@ def print_analysis(all_results: list[ConcurrencyResult]) -> None:
     print(f"\n{'=' * 70}")
     print("  Analysis")
     print(f"{'=' * 70}")
-    mq = max((r.latency.queue_ms for r in all_results if r.latency.queue_ms > 0), default=0)
+    mq = max(
+        (r.latency.queue_ms for r in all_results if r.latency.queue_ms > 0), default=0
+    )
     total_combos = len(all_results)
     failures = sum(1 for r in all_results if r.failure_rate > FAILURE_THRESHOLD)
     print(f"""
@@ -510,7 +539,9 @@ def _verify_stress_aggregate(
     if after_counter is not None:
         delta = after_counter - base_counter
         ok = abs(delta - counter_total) < 0.5
-        checks.append(("counter delta == submitted", ok, str(counter_total), f"{delta:.0f}"))
+        checks.append(
+            ("counter delta == submitted", ok, str(counter_total), f"{delta:.0f}")
+        )
     else:
         checks.append(("counter delta", False, str(counter_total), "no data"))
 
@@ -520,7 +551,9 @@ def _verify_stress_aggregate(
     if after_hist_count is not None:
         delta = after_hist_count - base_hist_count
         ok = abs(delta - hist_total) < 0.5
-        checks.append(("histogram count == submitted", ok, str(hist_total), f"{delta:.0f}"))
+        checks.append(
+            ("histogram count == submitted", ok, str(hist_total), f"{delta:.0f}")
+        )
     else:
         checks.append(("histogram count", False, str(hist_total), "no data"))
 
@@ -531,7 +564,9 @@ def _verify_stress_aggregate(
         delta = after_hist_sum - base_hist_sum
         expected = hist_sum
         ok = abs(delta - expected) < 1.0
-        checks.append(("histogram sum == expected", ok, f"{expected:.0f}", f"{delta:.0f}"))
+        checks.append(
+            ("histogram sum == expected", ok, f"{expected:.0f}", f"{delta:.0f}")
+        )
     else:
         checks.append(("histogram sum", False, f"{hist_sum:.0f}", "no data"))
 
@@ -554,7 +589,9 @@ def _verify_stress_aggregate(
 # ---------------------------------------------------------------------------
 
 
-def _verify_data_consistency(service_ip: str, prometheus_before: dict[str, float]) -> None:
+def _verify_data_consistency(
+    service_ip: str, prometheus_before: dict[str, float]
+) -> None:
     print(f"\n{'=' * 70}")
     print("  End-to-End Data Consistency (known values)")
     print(f"{'=' * 70}")
@@ -563,11 +600,14 @@ def _verify_data_consistency(service_ip: str, prometheus_before: dict[str, float
     LC = '{worker="consistency_check"}'
 
     # --- Counter: delta AND exact value ---
-    base = prometheus_before.get("counter_ck", _promql_value(service_ip, f"{NS}_train_step_total" + LC) or 0.0)
+    base = prometheus_before.get(
+        "counter_ck", _promql_value(service_ip, f"{NS}_train_step_total" + LC) or 0.0
+    )
     N, AMOUNT = 5, 1
     for _ in range(N):
         insight.metric_count(
-            "train_step_total", amount=AMOUNT,
+            "train_step_total",
+            amount=AMOUNT,
             documentation="Counter: total training steps",
             worker="consistency_check",
         )
@@ -575,10 +615,18 @@ def _verify_data_consistency(service_ip: str, prometheus_before: dict[str, float
     after = _promql_value(service_ip, f"{NS}_train_step_total" + LC)
     if after is not None:
         delta = after - base
-        checks.append(("counter +" + str(N), abs(delta - N) < 0.5, str(N), f"{delta:.1f}"))
+        checks.append(
+            ("counter +" + str(N), abs(delta - N) < 0.5, str(N), f"{delta:.1f}")
+        )
         expected = base + N * AMOUNT
-        checks.append(("counter value = " + str(int(expected)),
-                       abs(after - expected) < 0.5, str(int(expected)), f"{after:.0f}"))
+        checks.append(
+            (
+                "counter value = " + str(int(expected)),
+                abs(after - expected) < 0.5,
+                str(int(expected)),
+                f"{after:.0f}",
+            )
+        )
     else:
         checks.append(("counter", False, str(N), "no data"))
 
@@ -586,7 +634,8 @@ def _verify_data_consistency(service_ip: str, prometheus_before: dict[str, float
     GAUGE_VALUES = [1.23, 4.56, 7.89]
     for v in GAUGE_VALUES:
         insight.metric_value(
-            "reward_mean", value=v,
+            "reward_mean",
+            value=v,
             documentation="Gauge: mean reward value",
             worker="consistency_check",
         )
@@ -594,18 +643,29 @@ def _verify_data_consistency(service_ip: str, prometheus_before: dict[str, float
     after = _promql_value(service_ip, f"{NS}_reward_mean" + LC)
     expected = GAUGE_VALUES[-1]
     ok = after is not None and abs(after - expected) < 0.01
-    checks.append(("gauge = " + str(expected), ok, str(expected),
-                   f"{after:.4f}" if after is not None else "no data"))
+    checks.append(
+        (
+            "gauge = " + str(expected),
+            ok,
+            str(expected),
+            f"{after:.4f}" if after is not None else "no data",
+        )
+    )
 
     # --- Histogram: count AND sum ---
-    base_count = prometheus_before.get("hist_ck_count",
-        _promql_value(service_ip, f"{NS}_step_latency_ms_count" + LC) or 0.0)
-    base_sum = prometheus_before.get("hist_ck_sum",
-        _promql_value(service_ip, f"{NS}_step_latency_ms_sum" + LC) or 0.0)
+    base_count = prometheus_before.get(
+        "hist_ck_count",
+        _promql_value(service_ip, f"{NS}_step_latency_ms_count" + LC) or 0.0,
+    )
+    base_sum = prometheus_before.get(
+        "hist_ck_sum",
+        _promql_value(service_ip, f"{NS}_step_latency_ms_sum" + LC) or 0.0,
+    )
     HIST_VALUES = [100.0, 200.0, 300.0]
     for v in HIST_VALUES:
         insight.metric_distribution(
-            "step_latency_ms", value=v,
+            "step_latency_ms",
+            value=v,
             documentation="Histogram: step latency in ms",
             worker="consistency_check",
         )
@@ -616,15 +676,23 @@ def _verify_data_consistency(service_ip: str, prometheus_before: dict[str, float
 
     if after_count is not None:
         delta = after_count - base_count
-        checks.append(("histogram count +" + str(M), abs(delta - M) < 0.5, str(M), f"{delta:.1f}"))
+        checks.append(
+            ("histogram count +" + str(M), abs(delta - M) < 0.5, str(M), f"{delta:.1f}")
+        )
     else:
         checks.append(("histogram count", False, str(M), "no data"))
 
     if after_sum_val is not None:
         expected_sum = base_sum + sum(HIST_VALUES)
         ok = abs(after_sum_val - expected_sum) < 1.0
-        checks.append(("histogram sum = " + str(int(expected_sum)), ok,
-                       str(int(expected_sum)), f"{after_sum_val:.0f}"))
+        checks.append(
+            (
+                "histogram sum = " + str(int(expected_sum)),
+                ok,
+                str(int(expected_sum)),
+                f"{after_sum_val:.0f}",
+            )
+        )
     else:
         checks.append(("histogram sum", False, str(int(sum(HIST_VALUES))), "no data"))
 
@@ -653,7 +721,6 @@ def print_full_results(all_results: list[ConcurrencyResult]) -> None:
         if not api_results:
             continue
         print(f"\n  -- {api_name} --")
-        hdr = f"  {'P':>3} {'T':>3}  {'Submitted':>10} {'HubRcvd':>8}  {'Fail%':>6}  {'Avg(ms)':>8} {'p50(ms)':>8} {'p95(ms)':>8} {'Queue(ms)':>10}"
         hdr2 = f"  {'P':>3} {'T':>3}  {'Submitted':>10} {'HubRcvd':>8}  {'Fail%':>6}  {'Avg(ms)':>8} {'p50(ms)':>8} {'p95(ms)':>8} {'Queue(ms)':>10}  {'Thru/s':>10}"
         print(hdr2)
         print("  " + "-" * 100)
@@ -662,8 +729,8 @@ def print_full_results(all_results: list[ConcurrencyResult]) -> None:
             print(
                 f"  {r.num_procs:>3} {r.num_threads:>3}  "
                 f"{r.submitted:>10} {r.hub_delta:>8}  "
-                f"{r.failure_rate:>5.1%}  {lat.avg*1000:>7.1f} {lat.p50*1000:>7.1f} "
-                f"{lat.p95*1000:>7.1f} {lat.queue_ms:>9.0f}  {r.throughput_per_sec:>10.0f}"
+                f"{r.failure_rate:>5.1%}  {lat.avg * 1000:>7.1f} {lat.p50 * 1000:>7.1f} "
+                f"{lat.p95 * 1000:>7.1f} {lat.queue_ms:>9.0f}  {r.throughput_per_sec:>10.0f}"
             )
 
 
@@ -682,22 +749,26 @@ def main() -> int:
     # Rebuild results from checkpoint
     for api_name, entries in ckpt.get("results", {}).items():
         for entry in entries:
-            all_results.append(ConcurrencyResult(
-                api_name=api_name,
-                num_procs=entry["num_procs"],
-                num_threads=entry["num_threads"],
-                submitted=entry["submitted"],
-                submitted_sum=entry.get("submitted_sum", 0.0),
-                hub_delta=entry.get("hub_delta", 0),
-                failure_rate=entry.get("failure_rate", 0.0),
-                throughput_per_sec=entry.get("throughput_per_sec", 0.0),
-                latency=LatencyStats(**entry["latency"]),
-            ))
+            all_results.append(
+                ConcurrencyResult(
+                    api_name=api_name,
+                    num_procs=entry["num_procs"],
+                    num_threads=entry["num_threads"],
+                    submitted=entry["submitted"],
+                    submitted_sum=entry.get("submitted_sum", 0.0),
+                    hub_delta=entry.get("hub_delta", 0),
+                    failure_rate=entry.get("failure_rate", 0.0),
+                    throughput_per_sec=entry.get("throughput_per_sec", 0.0),
+                    latency=LatencyStats(**entry["latency"]),
+                )
+            )
 
     api_order = ["counter", "gauge", "histogram", "trace"]
     total_combos = len(api_order) * len(PROCESS_LEVELS) * len(THREAD_LEVELS)
     extra_combos = len(EXTRA_1P_THREADS) + len(EXTRA_10T_PROCS)
-    total_combos = len(api_order) * (len(PROCESS_LEVELS) * len(THREAD_LEVELS) + extra_combos)
+    total_combos = len(api_order) * (
+        len(PROCESS_LEVELS) * len(THREAD_LEVELS) + extra_combos
+    )
     skipped = len(completed)
 
     print("=" * 70)
@@ -713,12 +784,15 @@ def main() -> int:
 
     # -- Setup --
     try:
-        ray.init(address="auto", namespace="rl-insight-monitor", ignore_reinit_error=True)
+        ray.init(
+            address="auto", namespace="rl-insight-monitor", ignore_reinit_error=True
+        )
     except ConnectionError:
         ray.init(namespace="rl-insight-monitor", ignore_reinit_error=True)
 
     insight.init(
-        project="verl", experiment_name="ppo-stress-test",
+        project="verl",
+        experiment_name="ppo-stress-test",
         config={"server": {"service_ip": service_ip}},
     )
     if not _api._STATE.enabled:
@@ -734,11 +808,18 @@ def main() -> int:
     if not prom_before:
         prom_before = {
             "counter": _promql_value(service_ip, f"{NS}_train_step_total" + LS) or 0.0,
-            "hist_count": _promql_value(service_ip, f"{NS}_step_latency_ms_count" + LS) or 0.0,
-            "hist_sum": _promql_value(service_ip, f"{NS}_step_latency_ms_sum" + LS) or 0.0,
-            "counter_ck": _promql_value(service_ip, f"{NS}_train_step_total" + LC) or 0.0,
-            "hist_ck_count": _promql_value(service_ip, f"{NS}_step_latency_ms_count" + LC) or 0.0,
-            "hist_ck_sum": _promql_value(service_ip, f"{NS}_step_latency_ms_sum" + LC) or 0.0,
+            "hist_count": _promql_value(service_ip, f"{NS}_step_latency_ms_count" + LS)
+            or 0.0,
+            "hist_sum": _promql_value(service_ip, f"{NS}_step_latency_ms_sum" + LS)
+            or 0.0,
+            "counter_ck": _promql_value(service_ip, f"{NS}_train_step_total" + LC)
+            or 0.0,
+            "hist_ck_count": _promql_value(
+                service_ip, f"{NS}_step_latency_ms_count" + LC
+            )
+            or 0.0,
+            "hist_ck_sum": _promql_value(service_ip, f"{NS}_step_latency_ms_sum" + LC)
+            or 0.0,
         }
         ckpt["prometheus_before"] = prom_before
         _save_checkpoint(ckpt)
@@ -749,7 +830,7 @@ def main() -> int:
     print(f"{'=' * 70}")
 
     for api_name in api_order:
-        track = (api_name == "histogram")
+        track = api_name == "histogram"
         print(f"\n  -- {api_name} --")
         print_header()
 
@@ -758,15 +839,20 @@ def main() -> int:
                 key = _combo_key(api_name, num_procs, num_threads)
                 if key in completed:
                     # Already done: find the existing result and print it
-                    existing = [r for r in all_results
-                                if r.api_name == api_name
-                                and r.num_procs == num_procs
-                                and r.num_threads == num_threads]
+                    existing = [
+                        r
+                        for r in all_results
+                        if r.api_name == api_name
+                        and r.num_procs == num_procs
+                        and r.num_threads == num_threads
+                    ]
                     if existing:
                         print_row(existing[0])
                     continue
 
-                result = run_concurrency_test(api_name, num_procs, num_threads, track_sum=track)
+                result = run_concurrency_test(
+                    api_name, num_procs, num_threads, track_sum=track
+                )
                 all_results.append(result)
                 completed.add(key)
                 print_row(result)
@@ -774,7 +860,55 @@ def main() -> int:
                 # Save checkpoint after each combination
                 if api_name not in ckpt["results"]:
                     ckpt["results"][api_name] = []
-                ckpt["results"][api_name].append({
+                ckpt["results"][api_name].append(
+                    {
+                        "num_procs": result.num_procs,
+                        "num_threads": result.num_threads,
+                        "submitted": result.submitted,
+                        "submitted_sum": result.submitted_sum,
+                        "hub_delta": result.hub_delta,
+                        "failure_rate": result.failure_rate,
+                        "throughput_per_sec": result.throughput_per_sec,
+                        "latency": {
+                            "avg": result.latency.avg,
+                            "p50": result.latency.p50,
+                            "p95": result.latency.p95,
+                            "p99": result.latency.p99,
+                            "queue_ms": result.latency.queue_ms,
+                        },
+                    }
+                )
+                ckpt["completed"] = list(completed)
+                _save_checkpoint(ckpt)
+
+                time.sleep(1)
+
+        # -- Extra: 1-process high-thread stress --
+        print(f"\n  -- {api_name} (extra: 1p, high threads) --")
+        for num_threads in EXTRA_1P_THREADS:
+            key = _combo_key(api_name, 1, num_threads)
+            if key in completed:
+                existing = [
+                    r
+                    for r in all_results
+                    if r.api_name == api_name
+                    and r.num_procs == 1
+                    and r.num_threads == num_threads
+                ]
+                if existing:
+                    print_row(existing[0])
+                continue
+
+            result = run_concurrency_test(api_name, 1, num_threads, track_sum=track)
+            all_results.append(result)
+            completed.add(key)
+            print_row(result)
+
+            # Save checkpoint
+            if api_name not in ckpt["results"]:
+                ckpt["results"][api_name] = []
+            ckpt["results"][api_name].append(
+                {
                     "num_procs": result.num_procs,
                     "num_threads": result.num_threads,
                     "submitted": result.submitted,
@@ -789,50 +923,8 @@ def main() -> int:
                         "p99": result.latency.p99,
                         "queue_ms": result.latency.queue_ms,
                     },
-                })
-                ckpt["completed"] = list(completed)
-                _save_checkpoint(ckpt)
-
-                time.sleep(1)
-
-
-        # -- Extra: 1-process high-thread stress --
-        print(f"\n  -- {api_name} (extra: 1p, high threads) --")
-        for num_threads in EXTRA_1P_THREADS:
-            key = _combo_key(api_name, 1, num_threads)
-            if key in completed:
-                existing = [r for r in all_results
-                            if r.api_name == api_name
-                            and r.num_procs == 1
-                            and r.num_threads == num_threads]
-                if existing:
-                    print_row(existing[0])
-                continue
-
-            result = run_concurrency_test(api_name, 1, num_threads, track_sum=track)
-            all_results.append(result)
-            completed.add(key)
-            print_row(result)
-
-            # Save checkpoint
-            if api_name not in ckpt["results"]:
-                ckpt["results"][api_name] = []
-            ckpt["results"][api_name].append({
-                "num_procs": result.num_procs,
-                "num_threads": result.num_threads,
-                "submitted": result.submitted,
-                "submitted_sum": result.submitted_sum,
-                "hub_delta": result.hub_delta,
-                "failure_rate": result.failure_rate,
-                "throughput_per_sec": result.throughput_per_sec,
-                "latency": {
-                    "avg": result.latency.avg,
-                    "p50": result.latency.p50,
-                    "p95": result.latency.p95,
-                    "p99": result.latency.p99,
-                    "queue_ms": result.latency.queue_ms,
-                },
-            })
+                }
+            )
             ckpt["completed"] = list(completed)
             _save_checkpoint(ckpt)
             time.sleep(1)
@@ -842,10 +934,13 @@ def main() -> int:
         for num_procs in EXTRA_10T_PROCS:
             key = _combo_key(api_name, num_procs, 10)
             if key in completed:
-                existing = [r for r in all_results
-                            if r.api_name == api_name
-                            and r.num_procs == num_procs
-                            and r.num_threads == 10]
+                existing = [
+                    r
+                    for r in all_results
+                    if r.api_name == api_name
+                    and r.num_procs == num_procs
+                    and r.num_threads == 10
+                ]
                 if existing:
                     print_row(existing[0])
                 continue
@@ -858,27 +953,27 @@ def main() -> int:
             # Save checkpoint
             if api_name not in ckpt["results"]:
                 ckpt["results"][api_name] = []
-            ckpt["results"][api_name].append({
-                "num_procs": result.num_procs,
-                "num_threads": result.num_threads,
-                "submitted": result.submitted,
-                "submitted_sum": result.submitted_sum,
-                "hub_delta": result.hub_delta,
-                "failure_rate": result.failure_rate,
-                "throughput_per_sec": result.throughput_per_sec,
-                "latency": {
-                    "avg": result.latency.avg,
-                    "p50": result.latency.p50,
-                    "p95": result.latency.p95,
-                    "p99": result.latency.p99,
-                    "queue_ms": result.latency.queue_ms,
-                },
-            })
+            ckpt["results"][api_name].append(
+                {
+                    "num_procs": result.num_procs,
+                    "num_threads": result.num_threads,
+                    "submitted": result.submitted,
+                    "submitted_sum": result.submitted_sum,
+                    "hub_delta": result.hub_delta,
+                    "failure_rate": result.failure_rate,
+                    "throughput_per_sec": result.throughput_per_sec,
+                    "latency": {
+                        "avg": result.latency.avg,
+                        "p50": result.latency.p50,
+                        "p95": result.latency.p95,
+                        "p99": result.latency.p99,
+                        "queue_ms": result.latency.queue_ms,
+                    },
+                }
+            )
             ckpt["completed"] = list(completed)
             _save_checkpoint(ckpt)
             time.sleep(1)
-
-
 
     # -- Summary --
     print_api_summary(all_results)
