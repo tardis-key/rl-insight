@@ -169,13 +169,34 @@ Process count does not affect drift (64p×10t has p50 of just 0.4ms).
 
 ---
 
-## 5. verl Concurrency Assessment
+## 5. Runtime Overhead in verl Training
 
-> *(To be completed: actual concurrency in verl distributed training, API call frequency per step, performance scaling estimates)*
+Community contributor [@12138flash](https://github.com/12138flash) ran a controlled A/B experiment
+measuring the end-to-end training overhead of `rl-insight` on a real verl workload
+(PR [#88](https://github.com/verl-project/rl-insight/pull/88)).
+
+**Setup:**
+
+- Hardware: single Ascend 910B4
+- Model: Qwen2.5-0.5B-Instruct
+- Dataset: GSM8K (GRPO algorithm)
+- Logger: `[console, file, rl_insight]`
+
+**Results:**
+
+| Measurement | `rl-insight` disabled | `rl-insight` enabled | Delta |
+|---|---|---|---|
+| Avg step time (100 steps) | 13.40 s/step | 12.68 s/step | −0.72 s |
+| Avg step time (5 steps) | 17.83 s/step | 18.30 s/step | +0.47 s |
+
+Both measurements fall within normal run-to-run fluctuation. The 100-step average
+actually came out slightly faster with `rl-insight` enabled — a clear indication that
+the monitoring overhead is indistinguishable from experimental noise.
+
+**Conclusion:** the runtime overhead of `rl-insight` in a real verl training loop is negligible.
 
 ---
 
 ## Appendix: Related Files
 
 - Test script: `tests/monitor/test_monitor_stress.py`
-
