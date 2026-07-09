@@ -363,7 +363,7 @@ def run_concurrency_test(
 
     ctx = mp.get_context("spawn")
     result_queue: mp.Queue = ctx.Queue()
-    processes: list[mp.Process] = []
+    processes: list[mp.context.SpawnProcess] = []
 
     for _ in range(num_procs):
         p = ctx.Process(
