@@ -29,6 +29,17 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["OpenTelemetryTraceCollector"]
 
+_OTEL_EXPORT_LOGGERS = (
+    "opentelemetry.exporter.otlp.proto.http.trace_exporter",
+    "opentelemetry.sdk.trace.export",
+)
+
+
+def _reduce_otel_export_log_noise() -> None:
+    # Suppress WARNING retry spam; keep ERROR for real export failures.
+    for name in _OTEL_EXPORT_LOGGERS:
+        logging.getLogger(name).setLevel(logging.ERROR)
+
 
 class OpenTelemetryTraceCollector:
     """Export closed root spans to Tempo via OTLP/HTTP."""
@@ -42,6 +53,7 @@ class OpenTelemetryTraceCollector:
             )
             return
 
+        _reduce_otel_export_log_noise()
         provider = TracerProvider(resource=Resource.create({SERVICE_NAME: namespace}))
         provider.add_span_processor(
             BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint))
