@@ -64,7 +64,7 @@ jobs:
         run: |
           echo "Waiting for RL-Insight hub (port 18080)..."
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:18080/ > /dev/null 2>&1; then
+            if curl -sf http://127.0.0.1:18080/healthz > /dev/null 2>&1; then
               echo "Hub is ready."
               break
             fi
@@ -98,12 +98,25 @@ jobs:
 
       - name: Verify metrics in Prometheus
         run: |
-          echo "Querying Prometheus for smoke test metrics..."
-          # Check that the train_step_total counter was reported.
+          echo "Waiting for Prometheus to scrape smoke test metrics..."
+          attempt=0
+          max_attempts=15
+          while [ $attempt -lt $max_attempts ]; do
+            result=$(curl -sf "http://127.0.0.1:9090/api/v1/query?query=train_step_total" | python -c "import sys,json; d=json.load(sys.stdin); print(len(d['data']['result']))" 2>/dev/null || echo 0)
+            if [ "$result" -gt 0 ]; then
+              echo "Metrics available after $((attempt * 5))s."
+              break
+            fi
+            attempt=$((attempt + 1))
+            echo "  attempt $attempt/$max_attempts: no metrics yet, waiting 5s..."
+            sleep 5
+          done
+          echo ""
+          echo "train_step_total:"
           curl -sf "http://127.0.0.1:9090/api/v1/query?query=train_step_total" | python -m json.tool
-          # Check that the reward_mean gauge was reported.
+          echo "reward_mean:"
           curl -sf "http://127.0.0.1:9090/api/v1/query?query=reward_mean" | python -m json.tool
-          # Check that the step_latency_ms histogram was reported.
+          echo "step_latency_ms_bucket:"
           curl -sf "http://127.0.0.1:9090/api/v1/query?query=step_latency_ms_bucket" | python -m json.tool
 
       - name: Run monitor stress test
