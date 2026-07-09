@@ -1,4 +1,4 @@
-name: Special E2e Monitor Smoke Test
+name: Special E2e Monitor Smoke & Stress Test
 
 on:
   push:
@@ -15,6 +15,7 @@ on:
       - "rl_insight/server/**"
       - "rl_insight/config/services/**"
       - "tests/monitor/special_e2e/**"
+      - "tests/monitor/test_monitor_stress.py"
       - "docs/monitor/**"
 
 concurrency:
@@ -27,7 +28,7 @@ permissions:
 jobs:
   special_e2e_monitor_smoke_test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     strategy:
       matrix:
         python-version: ["3.11"]
@@ -104,6 +105,10 @@ jobs:
           curl -sf "http://127.0.0.1:9090/api/v1/query?query=reward_mean" | python -m json.tool
           # Check that the step_latency_ms histogram was reported.
           curl -sf "http://127.0.0.1:9090/api/v1/query?query=step_latency_ms_bucket" | python -m json.tool
+
+      - name: Run monitor stress test
+        run: |
+          python tests/monitor/test_monitor_stress.py
 
       - name: Stop server stack
         if: always()
