@@ -33,7 +33,7 @@ def main() -> None:
         "RL_INSIGHT_SERVER_URL", "http://127.0.0.1:18080"
     )
 
-    ray.init(namespace="rl-insight-monitor", ignore_reinit_error=True)
+    ray.init(address="auto", namespace="rl-insight-monitor", ignore_reinit_error=True)
     insight.init(project="verl", experiment_name="monitor_smoke_test")
 
     labels = {"worker": "trainer_0"}
@@ -57,11 +57,7 @@ def main() -> None:
 
         print(f"  Step {step + 1}/{num_iterations} complete")
 
-    # Allow a short window for Prometheus to scrape the latest metrics.
-    time.sleep(5)
     print("Smoke test instrumentation complete.")
-
-    ray.shutdown()
 
 
 if __name__ == "__main__":

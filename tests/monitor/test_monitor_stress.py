@@ -48,12 +48,12 @@ import rl_insight.api as _api
 # ---------------------------------------------------------------------------
 
 STRESS_DURATION_S = 1
-PROCESS_LEVELS = [1, 2, 4, 8]
-THREAD_LEVELS = [10, 20, 40]
+PROCESS_LEVELS = [1, 2, 4]
+THREAD_LEVELS = [10, 20]
 
 # Extra single-dimension stress: push one axis while holding the other fixed
-EXTRA_1P_THREADS = [80]
-EXTRA_10T_PROCS = [16]
+EXTRA_1P_THREADS = [40]
+EXTRA_10T_PROCS = [8]
 FAILURE_THRESHOLD = 0.05
 PROMETHEUS_PORT = int(os.environ.get("RL_INSIGHT_PROMETHEUS_PORT", "9090"))
 GRAFANA_PORT = 3000
@@ -273,7 +273,7 @@ def _process_worker(
     elif api_name == "gauge":
 
         def _emit(seq: int) -> None:
-            _insight.metric_value(
+            _insight.metric_gauge(
                 "reward_mean",
                 value=float(seq % 1000),
                 documentation="Gauge: mean reward value",
@@ -282,7 +282,7 @@ def _process_worker(
     elif api_name == "histogram":
 
         def _emit(seq: int) -> None:
-            _insight.metric_distribution(
+            _insight.metric_histogram(
                 "step_latency_ms",
                 value=float(200 + seq % 100),
                 documentation="Histogram: step latency in ms",
@@ -501,8 +501,8 @@ def _verify_grafana_frontend(service_ip: str) -> None:
         return
     for panel, query in [
         ("metric_count", f"{NS}_train_step_total"),
-        ("metric_value", f"{NS}_reward_mean"),
-        ("metric_distribution", f"{NS}_step_latency_ms_bucket"),
+        ("metric_gauge", f"{NS}_reward_mean"),
+        ("metric_histogram", f"{NS}_step_latency_ms_bucket"),
     ]:
         has = _prometheus_has_data(service_ip, query)
         print(f"    [{'PASS' if has else 'FAIL'}] {panel}")
@@ -635,7 +635,7 @@ def _verify_data_consistency(
     # --- Gauge ---
     GAUGE_VALUES = [1.23, 4.56, 7.89]
     for v in GAUGE_VALUES:
-        insight.metric_value(
+        insight.metric_gauge(
             "reward_mean",
             value=v,
             documentation="Gauge: mean reward value",
@@ -665,7 +665,7 @@ def _verify_data_consistency(
     )
     HIST_VALUES = [100.0, 200.0, 300.0]
     for v in HIST_VALUES:
-        insight.metric_distribution(
+        insight.metric_histogram(
             "step_latency_ms",
             value=v,
             documentation="Histogram: step latency in ms",

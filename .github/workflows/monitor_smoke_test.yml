@@ -92,6 +92,13 @@ jobs:
             sleep 2
           done
 
+      - name: Start persistent Ray cluster
+        run: |
+          ray stop --force 2>/dev/null || true
+          export RL_INSIGHT_SERVER_URL=http://127.0.0.1:18080
+          ray start --head --num-cpus=8 --port=6379
+          echo "Ray cluster started."
+
       - name: Run monitor smoke test
         run: |
           python tests/monitor/special_e2e/test_monitor_smoke.py
@@ -102,7 +109,7 @@ jobs:
           attempt=0
           max_attempts=15
           while [ $attempt -lt $max_attempts ]; do
-            result=$(curl -sf "http://127.0.0.1:9090/api/v1/query?query=train_step_total" | python -c "import sys,json; d=json.load(sys.stdin); print(len(d['data']['result']))" 2>/dev/null || echo 0)
+            result=$(curl -sf "http://127.0.0.1:9090/api/v1/query?query=rl_insight_monitor_train_step_total" | python -c "import sys,json; d=json.load(sys.stdin); print(len(d['data']['result']))" 2>/dev/null || echo 0)
             if [ "$result" -gt 0 ]; then
               echo "Metrics available after $((attempt * 5))s."
               break
@@ -113,11 +120,11 @@ jobs:
           done
           echo ""
           echo "train_step_total:"
-          curl -sf "http://127.0.0.1:9090/api/v1/query?query=train_step_total" | python -m json.tool
+          curl -sf "http://127.0.0.1:9090/api/v1/query?query=rl_insight_monitor_train_step_total" | python -m json.tool
           echo "reward_mean:"
-          curl -sf "http://127.0.0.1:9090/api/v1/query?query=reward_mean" | python -m json.tool
+          curl -sf "http://127.0.0.1:9090/api/v1/query?query=rl_insight_monitor_reward_mean" | python -m json.tool
           echo "step_latency_ms_bucket:"
-          curl -sf "http://127.0.0.1:9090/api/v1/query?query=step_latency_ms_bucket" | python -m json.tool
+          curl -sf "http://127.0.0.1:9090/api/v1/query?query=rl_insight_monitor_step_latency_ms_bucket" | python -m json.tool
 
       - name: Run monitor stress test
         run: |
