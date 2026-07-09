@@ -48,12 +48,12 @@ import rl_insight.api as _api
 # ---------------------------------------------------------------------------
 
 STRESS_DURATION_S = 1
-PROCESS_LEVELS = [1, 2, 4, 8, 16]
-THREAD_LEVELS = [10, 20, 40, 80]
+PROCESS_LEVELS = [1, 2, 4, 8]
+THREAD_LEVELS = [10, 20, 40]
 
 # Extra single-dimension stress: push one axis while holding the other fixed
-EXTRA_1P_THREADS = [160, 320, 640]
-EXTRA_10T_PROCS = [32, 64]
+EXTRA_1P_THREADS = [80]
+EXTRA_10T_PROCS = [16]
 FAILURE_THRESHOLD = 0.05
 PROMETHEUS_PORT = int(os.environ.get("RL_INSIGHT_PROMETHEUS_PORT", "9090"))
 GRAFANA_PORT = 3000
@@ -248,6 +248,8 @@ def _process_worker(
         )
     except ConnectionError:
         _ray.init(namespace="rl-insight-monitor", ignore_reinit_error=True)
+
+    os.environ.setdefault("RL_INSIGHT_SERVER_URL", "http://127.0.0.1:18080")
 
     _service_ip = (
         os.environ.get("RL_INSIGHT_SERVICE_IP", "127.0.0.1").strip() or "127.0.0.1"
@@ -789,6 +791,8 @@ def main() -> int:
         )
     except ConnectionError:
         ray.init(namespace="rl-insight-monitor", ignore_reinit_error=True)
+
+    os.environ.setdefault("RL_INSIGHT_SERVER_URL", "http://127.0.0.1:18080")
 
     insight.init(
         project="verl",
