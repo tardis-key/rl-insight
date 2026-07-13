@@ -27,7 +27,7 @@ permissions:
 jobs:
   special_e2e_monitor_smoke_test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     strategy:
       matrix:
         python-version: ["3.11"]
@@ -49,6 +49,7 @@ jobs:
         run: rl-insight --help
 
       - name: Install server services (Prometheus, Tempo, Grafana)
+        timeout-minutes: 20
         run: |
           rl-insight server install
           echo "Installed server binaries under ~/.rl-insight/services"
@@ -61,15 +62,16 @@ jobs:
 
       - name: Wait for services to be ready
         run: |
-          echo "Waiting for RL-Insight hub (port 18080)..."
+          echo "Waiting for RL-Insight server (port 18080)..."
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:18080/ > /dev/null 2>&1; then
-              echo "Hub is ready."
+            if curl -sf http://127.0.0.1:18080/healthz > /dev/null 2>&1; then
+              echo "RL-Insight server is ready."
               break
             fi
             echo "  attempt $i/30: hub not ready yet, waiting..."
             sleep 2
           done
+          curl -sf http://127.0.0.1:18080/healthz > /dev/null
 
           echo "Waiting for Prometheus (port 9090)..."
           for i in $(seq 1 30); do
@@ -80,6 +82,18 @@ jobs:
             echo "  attempt $i/30: Prometheus not ready yet, waiting..."
             sleep 2
           done
+          curl -sf http://127.0.0.1:9090/-/ready > /dev/null
+
+          echo "Waiting for Tempo (port 3200)..."
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3200/ready > /dev/null 2>&1; then
+              echo "Tempo is ready."
+              break
+            fi
+            echo "  attempt $i/30: Tempo not ready yet, waiting..."
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:3200/ready > /dev/null
 
           echo "Waiting for Grafana (port 3000)..."
           for i in $(seq 1 30); do
@@ -90,20 +104,10 @@ jobs:
             echo "  attempt $i/30: Grafana not ready yet, waiting..."
             sleep 2
           done
+          curl -sf http://127.0.0.1:3000/api/health > /dev/null
 
       - name: Run monitor smoke test
-        run: |
-          python tests/monitor/special_e2e/test_monitor_smoke.py
-
-      - name: Verify metrics in Prometheus
-        run: |
-          echo "Querying Prometheus for smoke test metrics..."
-          # Check that the train_step_total counter was reported.
-          curl -sf "http://127.0.0.1:9090/api/v1/query?query=train_step_total" | python -m json.tool
-          # Check that the reward_mean gauge was reported.
-          curl -sf "http://127.0.0.1:9090/api/v1/query?query=reward_mean" | python -m json.tool
-          # Check that the step_latency_ms histogram was reported.
-          curl -sf "http://127.0.0.1:9090/api/v1/query?query=step_latency_ms_bucket" | python -m json.tool
+        run: pytest -s -v tests/monitor/special_e2e/test_monitor_smoke.py
 
       - name: Stop server stack
         if: always()
@@ -112,3 +116,4 @@ jobs:
           rl-insight server stop || true
           # Clean up any lingering Ray processes.
           ray stop --force 2>/dev/null || true
+          rm -rf ~/.rl-insight/services

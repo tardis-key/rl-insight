@@ -12,57 +12,176 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Smoke test for RL-Insight Monitor.
-
-Runs a short instrumentation loop against a running RL-Insight server stack
-(Prometheus + Tempo + Grafana + hub) and verifies metrics are being collected.
-"""
+"""Data-path tests for a monitor stack managed by the CI workflow."""
 
 from __future__ import annotations
 
+import json
 import os
+import sys
 import time
+import uuid
+from collections.abc import Callable, Generator
+from typing import Any, cast
 
+import pytest
 import ray
+import requests
+
 import rl_insight as insight
+from rl_insight.utils.constants import MonitorRayActor
 
 
-def main() -> None:
-    """Run a finite instrumentation loop for smoke-testing the monitor stack."""
-    server_url = os.environ.setdefault(
-        "RL_INSIGHT_SERVER_URL", "http://127.0.0.1:18080"
+pytestmark = pytest.mark.skipif(
+    sys.platform != "linux", reason="the managed server stack only runs on Linux"
+)
+
+SERVER_URL = os.environ.get("RL_INSIGHT_SERVER_URL", "http://127.0.0.1:18080")
+TEMPO_QUERY_URL = os.environ.get("RL_INSIGHT_TEMPO_QUERY_URL", "http://127.0.0.1:3200")
+READY_TIMEOUT_SECONDS = 60
+TEST_RUN_ID = uuid.uuid4().hex
+
+
+def _wait_for_json(
+    url: str,
+    *,
+    params: dict[str, str] | None = None,
+    ready: Callable[[dict[str, Any]], bool] = bool,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + READY_TIMEOUT_SECONDS
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        try:
+            response = requests.get(url, params=params, timeout=3)
+            response.raise_for_status()
+            payload = response.json()
+            if ready(payload):
+                return payload
+        except (requests.RequestException, ValueError) as exc:
+            last_error = exc
+        time.sleep(1)
+    raise AssertionError(
+        f"{url} was not ready within {READY_TIMEOUT_SECONDS}s: {last_error}"
     )
 
-    ray.init(namespace="rl-insight-monitor", ignore_reinit_error=True)
-    insight.init(project="verl", experiment_name="monitor_smoke_test")
 
-    labels = {"worker": "trainer_0"}
-    num_iterations = 10
-
-    print(
-        f"Running {num_iterations} instrumentation iterations against {server_url}..."
+@pytest.fixture(scope="module")
+def monitor_stack() -> Generator[dict[str, str], None, None]:
+    """Connect the reporting client to the stack started by the workflow."""
+    os.environ["RL_INSIGHT_SERVER_URL"] = SERVER_URL
+    services = _wait_for_json(
+        f"{SERVER_URL}/api/v1/services",
+        ready=lambda data: data.get("status") == "ok",
     )
+    endpoints = {
+        "prometheus": f"http://127.0.0.1:{services['prometheus_port']}",
+        "otlp": f"http://127.0.0.1:{services['otlp_port']}",
+        "tempo": TEMPO_QUERY_URL,
+    }
 
-    for step in range(num_iterations):
-        with insight.trace_state(
-            "rollout_generate", state_lane_id="replica_0", step=step
-        ):
-            time.sleep(0.5)
+    ray.init(namespace=MonitorRayActor.NAMESPACE, ignore_reinit_error=True)
+    insight.init(project="rl-insight-e2e", experiment_name="monitor-smoke")
+    try:
+        yield endpoints
+    finally:
+        insight.finish()
+        try:
+            hub = ray.get_actor(
+                MonitorRayActor.NAME, namespace=MonitorRayActor.NAMESPACE
+            )
+            ray.kill(hub, no_restart=True)
+        except ValueError:
+            pass
+        ray.shutdown()
 
-        insight.metric_count("train_step_total", amount=1, **labels)
-        insight.metric_gauge("reward_mean", value=1.0 + step * 0.01, **labels)
+
+def test_monitor_services_should_be_reachable_when_stack_is_running(
+    monitor_stack: dict[str, str],
+) -> None:
+    """Verify the control, metrics, and trace data paths are reachable."""
+    health = requests.get(f"{SERVER_URL}/healthz", timeout=3)
+    prometheus = requests.get(f"{monitor_stack['prometheus']}/-/ready", timeout=3)
+    tempo = requests.get(f"{monitor_stack['tempo']}/ready", timeout=3)
+    otlp = requests.get(f"{monitor_stack['otlp']}/v1/traces", timeout=3)
+    hub = ray.get_actor(MonitorRayActor.NAME, namespace=MonitorRayActor.NAMESPACE)
+    hub_status = cast(dict[str, Any], ray.get(hub.get_status.remote()))
+
+    assert health.json() == {"status": "ok"}
+    assert prometheus.ok
+    assert tempo.ok
+    assert otlp.status_code < 500
+    assert requests.get(hub_status["metrics_endpoint"], timeout=3).ok
+    assert hub_status["otel_traces_enabled"] is True
+
+
+def test_monitor_metrics_should_match_reported_values_when_events_are_emitted(
+    monitor_stack: dict[str, str],
+) -> None:
+    """Report counter, gauge, and histogram events and verify stored values."""
+    for step in range(3):
+        insight.metric_count(
+            "train_step", amount=1, worker="trainer_0", test_run=TEST_RUN_ID
+        )
+        insight.metric_gauge(
+            "reward_mean",
+            value=1.0 + step * 0.01,
+            worker="trainer_0",
+            test_run=TEST_RUN_ID,
+        )
         insight.metric_histogram(
-            "step_latency_ms", value=200 + (step % 5) * 20, **labels
+            "step_latency_ms",
+            value=200 + step * 20,
+            worker="trainer_0",
+            test_run=TEST_RUN_ID,
         )
 
-        print(f"  Step {step + 1}/{num_iterations} complete")
+    hub = ray.get_actor(MonitorRayActor.NAME, namespace=MonitorRayActor.NAMESPACE)
+    ray.get(hub.get_status.remote())
 
-    # Allow a short window for Prometheus to scrape the latest metrics.
-    time.sleep(5)
-    print("Smoke test instrumentation complete.")
+    expected_values = {
+        "rl_insight_monitor_train_step_total": 3.0,
+        "rl_insight_monitor_reward_mean": 1.02,
+        "rl_insight_monitor_step_latency_ms_count": 3.0,
+        "rl_insight_monitor_step_latency_ms_sum": 660.0,
+    }
+    for metric_name, expected in expected_values.items():
+        payload = _wait_for_json(
+            f"{monitor_stack['prometheus']}/api/v1/query",
+            params={
+                "query": (f'{metric_name}{{test_run="{TEST_RUN_ID}"}} == {expected}')
+            },
+            ready=lambda data: bool(data.get("data", {}).get("result")),
+        )
+        result = payload["data"]["result"]
+        assert result[0]["metric"]["worker"] == "trainer_0"
+        assert float(result[0]["value"][1]) == pytest.approx(expected)
 
-    ray.shutdown()
 
+def test_monitor_trace_should_be_queryable_when_trace_is_reported(
+    monitor_stack: dict[str, str],
+) -> None:
+    """Report a state trace and verify Tempo stores its name and attributes."""
+    trace_name = "monitor_e2e_rollout_generate"
+    with insight.trace_state(
+        trace_name,
+        state_lane_id="replica_0",
+        step=7,
+        test_run=TEST_RUN_ID,
+    ):
+        time.sleep(0.1)
 
-if __name__ == "__main__":
-    main()
+    hub = ray.get_actor(MonitorRayActor.NAME, namespace=MonitorRayActor.NAMESPACE)
+    status = cast(dict[str, Any], ray.get(hub.get_status.remote()))
+    assert status["otel_traces_enabled"] is True
+
+    search = _wait_for_json(
+        f"{monitor_stack['tempo']}/api/search",
+        params={"q": f'{{ name = "{trace_name}" && span.test_run = "{TEST_RUN_ID}" }}'},
+        ready=lambda data: bool(data.get("traces")),
+    )
+    trace_id = search["traces"][0]["traceID"]
+    trace = _wait_for_json(f"{monitor_stack['tempo']}/api/traces/{trace_id}")
+    serialized_trace = json.dumps(trace)
+
+    assert trace_name in serialized_trace
+    assert TEST_RUN_ID in serialized_trace
