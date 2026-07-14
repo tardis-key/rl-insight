@@ -40,7 +40,7 @@ PACKAGE="Ascend-mindxdl-npu-exporter_${VERSION}_linux-${ARCH}.zip"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
-curl --noproxy '*' -fL \
+curl -fL \
   "https://gitcode.com/Ascend/mind-cluster/releases/download/v${VERSION}/${PACKAGE}" \
   -o "${WORK_DIR}/${PACKAGE}"
 unzip -q "${WORK_DIR}/${PACKAGE}" -d "${WORK_DIR}/package"
@@ -57,6 +57,8 @@ sudo install -d -m 0750 /var/log/mindx-dl/npu-exporter
 ## 3. 启动并验证 NPU Exporter
 
 `<NODE_IP>` 就是当前安装 NPU Exporter 这台机器的本机 IP。替换后直接启动二进制：
+
+> **注意：** 以下命令要求当前用户已经具有有效的 `sudo` 凭据，或者在 root shell 中执行。`nohup` 启动后无法交互式输入 `sudo` 密码。
 
 ```bash
 nohup sudo env \

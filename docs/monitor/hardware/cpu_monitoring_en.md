@@ -40,7 +40,7 @@ esac
 ARCHIVE="node_exporter-${VERSION}.linux-${ARCH}.tar.gz"
 BASE_URL="https://github.com/prometheus/node_exporter/releases/download/v${VERSION}"
 
-curl --noproxy '*' -fLO "${BASE_URL}/${ARCHIVE}"
+curl -fLO "${BASE_URL}/${ARCHIVE}"
 tar -xzf "${ARCHIVE}"
 sudo install -m 0755 \
   "node_exporter-${VERSION}.linux-${ARCH}/node_exporter" \

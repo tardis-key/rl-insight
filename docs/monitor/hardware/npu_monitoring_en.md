@@ -40,7 +40,7 @@ PACKAGE="Ascend-mindxdl-npu-exporter_${VERSION}_linux-${ARCH}.zip"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
-curl --noproxy '*' -fL \
+curl -fL \
   "https://gitcode.com/Ascend/mind-cluster/releases/download/v${VERSION}/${PACKAGE}" \
   -o "${WORK_DIR}/${PACKAGE}"
 unzip -q "${WORK_DIR}/${PACKAGE}" -d "${WORK_DIR}/package"
@@ -57,6 +57,8 @@ Running the binary directly does not require a systemd service file. See the [of
 ## 3. Start and verify NPU Exporter
 
 `<NODE_IP>` is the local IP of the machine where NPU Exporter is being installed. Replace it, then start the binary directly:
+
+> **Note:** The following command requires the current user to have valid `sudo` credentials or to run it from a root shell. After `nohup` starts, it cannot accept a `sudo` password interactively.
 
 ```bash
 nohup sudo env \
