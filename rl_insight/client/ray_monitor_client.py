@@ -32,8 +32,19 @@ logger.setLevel(logging.WARNING)
 __all__ = ["MonitorRayClient", "create_ray_monitor_client", "get_or_create_monitor_hub"]
 
 
+def _current_job_actor_name() -> str:
+    """Return a hub actor name scoped to the current Ray job."""
+    job_id = ray.get_runtime_context().get_job_id()
+    job_id_str = job_id if isinstance(job_id, str) else job_id.hex()
+    return f"{MonitorRayActor.NAME}_{job_id_str}"
+
+
 def get_or_create_monitor_hub(conf: DictConfig) -> Any:
-    """Get the detached ``MonitorHubActor`` handle, creating it on first use (race-safe).
+    """Get or create a job-scoped MonitorHubActor with health check.
+
+    Each Ray job gets its own hub actor named
+    ``MonitorRayActor.NAME_{job_id}``. The actor is not detached, so it
+    cleans up automatically when the job exits.
 
     Args:
         conf: Merged trainer monitor config passed to the actor constructor.
@@ -45,7 +56,7 @@ def get_or_create_monitor_hub(conf: DictConfig) -> Any:
         RuntimeError: If Ray is not initialized.
     """
 
-    actor_name = MonitorRayActor.NAME
+    actor_name = _current_job_actor_name()
     namespace = MonitorRayActor.NAMESPACE
 
     try:
@@ -59,11 +70,9 @@ def get_or_create_monitor_hub(conf: DictConfig) -> Any:
             "[rl-insight] No existing monitor hub actor %r found; creating one.",
             actor_name,
         )
-
     actor_options: dict[str, Any] = {
         "name": actor_name,
         "namespace": namespace,
-        "lifetime": "detached",
     }
 
     try:

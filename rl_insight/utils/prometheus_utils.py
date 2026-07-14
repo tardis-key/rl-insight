@@ -132,7 +132,12 @@ class PrometheusTargetStore:
             + format_host_port(local_addresses()["loopback"], self.prometheus_port)
             + "/-/reload"
         )
-        response = requests.post(url, timeout=5)
+
+        with requests.Session() as session:
+            # bypass http_proxy for localhost Prometheus reload
+            session.trust_env = False
+            response = session.post(url, timeout=5)
+
         response.raise_for_status()
         return True
 
@@ -161,6 +166,7 @@ def start_metrics_http_server(port: int, addr: str = "") -> None:
         port: TCP port to listen on.
         addr: Bind address; empty may mean all interfaces depending on library defaults.
     """
+    addr = addr.strip("[]") if addr else addr
     start_http_server(port, addr=addr)
 
 
