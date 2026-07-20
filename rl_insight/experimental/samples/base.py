@@ -79,7 +79,7 @@ class BaseSample(Protocol):
         session_index: int,
         trajectory_index: int,
         exit_reason: str = "finished",
-        status: str = "success",
+        status="success",
     ) -> None:
         """Mark a trajectory as done."""
         ...
