@@ -14,14 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Generate realistic FileSampleRecord data for timeline visualization.
+"""Generate trajectory events and feed them through TrajectoryBuilder.
+
+This script only knows about ``TrajectoryBuilder``. It emits the two
+builder event types (``trajectory_begin`` / ``step``) and never touches
+any ``BaseSample`` implementation directly. The storage backend is
+decided by the factory passed to ``TrajectoryBuilder`` in ``main()``.
 
 Usage::
 
     python generate_data.py /path/to/output --samples 8
-
-Each sample simulates an agent solving a coding task with multiple
-rollout attempts, tool calls, and mixed success/failure outcomes.
+    python generate_data.py /path/to/output --stream
 """
 
 from __future__ import annotations
@@ -36,13 +39,9 @@ if str(_project_root) not in sys.path:
 
 import argparse  # noqa: E402
 import random  # noqa: E402
+from typing import Any  # noqa: E402
 
-from rl_insight.experimental.samples import (  # noqa: E402
-    FileSampleRecord,
-    Step,
-    ToolResult,
-    TrainingStatus,
-)
+from rl_insight.experimental.builder import TrajectoryBuilder  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Scenario templates -- each is a plausible coding task
@@ -286,142 +285,8 @@ TOOL_OBSERVATIONS = {
     ],
 }
 
-# ---------------------------------------------------------------------------
-# Generator
-# ---------------------------------------------------------------------------
 
-
-def generate(output_dir: str, sample_count: int = 8, seed: int = 42) -> None:
-    random.seed(seed)
-
-    for si in range(sample_count):
-        uid = f"task-{si:04d}-{random.randint(1000, 9999)}"
-        scenario_idx = si % len(SCENARIOS)
-        scenario = SCENARIOS[scenario_idx]
-
-        fs = FileSampleRecord.create(output_dir, uid=uid, sample_index=si)
-
-        # Determine success: ~30% chance per sample to have any reward > 0
-        sample_success = random.random() < 0.35
-        session_count = random.randint(3, 5)
-
-        for sess_i in range(session_count):
-            # Each session: 1-4 trajectories
-            traj_count = random.randint(1, 4)
-
-            for ti in range(traj_count):
-                fs.new_trajectory(session_index=sess_i)
-                generate_trajectory(
-                    fs, sess_i, ti, scenario, sample_success, ti == traj_count - 1
-                )
-
-    print(f"Generated {sample_count} samples in {output_dir}")
-
-
-def build_trajectory_steps(
-    scenario: dict,
-    sample_success: bool,
-    is_last_in_session: bool,
-) -> tuple[list[Step], str, TrainingStatus, float]:
-    """Build step data for a trajectory without writing to storage.
-
-    Returns (steps, finish_reason, status, reward_score).
-    """
-    tools = list(scenario["tools"])
-    thoughts = list(scenario["thoughts"])
-
-    # Pad thoughts if shorter than tools.
-    while len(thoughts) < len(tools):
-        thoughts.append("Continuing to work on the task...")
-
-    # Randomize trajectory length: minimum 4 steps, up to full scenario.
-    max_len = min(len(tools), len(thoughts))
-    traj_len = random.randint(max(4, max_len // 2), max_len)
-    tools = tools[:traj_len]
-    thoughts = thoughts[:traj_len]
-
-    # Determine success for this trajectory
-    if sample_success and (is_last_in_session or random.random() < 0.4):
-        reward = 1.0
-        finish_reason = "stop"
-    else:
-        reward = 0.0
-        if random.random() < 0.3:
-            finish_reason = "length"
-        elif random.random() < 0.2:
-            finish_reason = "max_step_limit"
-        else:
-            finish_reason = "stop"
-        if tools[-1] == "finish" and reward == 0.0 and random.random() < 0.5:
-            tools[-1] = random.choice(["Bash", "Read"])
-
-    status: TrainingStatus = "success"
-    if reward <= 0 and finish_reason == "length":
-        status = "truncated"
-
-    steps: list[Step] = []
-    for step_i in range(len(tools)):
-        tool_name = tools[step_i]
-        thought = thoughts[step_i]
-        is_last_step = step_i == len(tools) - 1
-
-        if tool_name == "finish":
-            tool_results = [
-                ToolResult(
-                    name="finish",
-                    action="submit",
-                    observation="Task completed successfully."
-                    if reward > 0
-                    else "Unable to resolve.",
-                    status="ok",
-                    execution_time=random.uniform(0.1, 0.5),
-                )
-            ]
-        else:
-            obs = random.choice(TOOL_OBSERVATIONS.get(tool_name, ["..."]))
-            tool_results = [
-                ToolResult(
-                    name=tool_name,
-                    action=generate_action(tool_name),
-                    observation=obs,
-                    status="ok" if random.random() < 0.9 else "timeout",
-                    execution_time=random.uniform(0.5, 5.0),
-                )
-            ]
-
-        step = Step(
-            step_idx=step_i + 1,
-            thought=thought,
-            tool_results=tool_results,
-            done=is_last_step,
-            exit_reason=finish_reason if is_last_step else "",
-        )
-        steps.append(step)
-
-    return steps, finish_reason, status, reward
-
-
-def generate_trajectory(
-    fs: FileSampleRecord,
-    session_index: int,
-    trajectory_index: int,
-    scenario: dict,
-    sample_success: bool,
-    is_last_in_session: bool,
-) -> None:
-    """Write one trajectory to a FileSampleRecord (all steps at once)."""
-    steps, finish_reason, status, reward = build_trajectory_steps(
-        scenario,
-        sample_success,
-        is_last_in_session,
-    )
-    for step in steps:
-        fs.add_step(session_index, trajectory_index, step)
-    fs.finish_trajectory(session_index, trajectory_index, finish_reason, status)
-    fs.set_trajectory_reward(session_index, trajectory_index, reward)
-
-
-def generate_action(tool_name: str) -> str:
+def _generate_action(tool_name: str) -> str:
     actions = {
         "Bash": [
             "pytest tests/test_separable.py -xvs",
@@ -449,85 +314,244 @@ def generate_action(tool_name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# CLI
+# Event builders -- only produce dicts for TrajectoryBuilder.feed()
 # ---------------------------------------------------------------------------
 
 
-def stream(output_dir: str, sample_count: int, interval: float, seed: int) -> None:
-    """Generate data incrementally -- one trajectory at a time."""
+def _build_step_event(
+    uid: str,
+    step_index: int,
+    finish_reason: str,
+    thought: str,
+    tool_results: list[dict[str, Any]],
+    is_last: bool,
+) -> dict[str, Any]:
+    """Build a ``step`` event dict."""
+    fr = finish_reason if is_last else "tool_calls"
+    return {
+        "event": "step",
+        "uid": uid,
+        "step_index": step_index,
+        "finish_reason": fr,
+        "thought": thought,
+        "tool_results": tool_results,
+    }
+
+
+def build_trajectory_events(
+    uid: str,
+    sample_index: int,
+    session_index: int,
+    trajectory_index: int,
+    scenario: dict,
+    sample_success: bool,
+    is_last_in_session: bool,
+) -> list[dict[str, Any]]:
+    """Build the full event list for one trajectory.
+
+    Returns a list of event dicts: one ``trajectory_begin`` followed
+    by N ``step`` events. The caller feeds them to ``builder.feed()``.
+    """
+    tools = list(scenario["tools"])
+    thoughts = list(scenario["thoughts"])
+
+    while len(thoughts) < len(tools):
+        thoughts.append("Continuing to work on the task...")
+
+    max_len = min(len(tools), len(thoughts))
+    traj_len = random.randint(max(4, max_len // 2), max_len)
+    tools = tools[:traj_len]
+    thoughts = thoughts[:traj_len]
+
+    if sample_success and (is_last_in_session or random.random() < 0.4):
+        reward = 1.0
+        finish_reason = "stop"
+    else:
+        reward = 0.0
+        if random.random() < 0.3:
+            finish_reason = "length"
+        elif random.random() < 0.2:
+            finish_reason = "max_step_limit"
+        else:
+            finish_reason = "stop"
+        if tools[-1] == "finish" and reward == 0.0 and random.random() < 0.5:
+            tools[-1] = random.choice(["Bash", "Read"])
+
+    events: list[dict[str, Any]] = []
+
+    events.append(
+        {
+            "event": "trajectory_begin",
+            "uid": uid,
+            "sample_index": sample_index,
+            "session_index": session_index,
+            "trajectory_index": trajectory_index,
+            "reason": "initial",
+        }
+    )
+
+    for step_i in range(len(tools)):
+        tool_name = tools[step_i]
+        thought = thoughts[step_i]
+        is_last_step = step_i == len(tools) - 1
+
+        if tool_name == "finish":
+            tool_results = [
+                {
+                    "name": "finish",
+                    "action": "submit",
+                    "observation": (
+                        "Task completed successfully."
+                        if reward > 0
+                        else "Unable to resolve."
+                    ),
+                    "status": "ok",
+                }
+            ]
+        else:
+            obs = random.choice(TOOL_OBSERVATIONS.get(tool_name, ["..."]))
+            tool_results = [
+                {
+                    "name": tool_name,
+                    "action": _generate_action(tool_name),
+                    "observation": obs,
+                    "status": "ok" if random.random() < 0.9 else "timeout",
+                }
+            ]
+
+        events.append(
+            _build_step_event(
+                uid=uid,
+                step_index=step_i + 1,
+                finish_reason=finish_reason,
+                thought=thought,
+                tool_results=tool_results,
+                is_last=is_last_step,
+            )
+        )
+
+    return events
+
+
+# ---------------------------------------------------------------------------
+# Core generation -- only interacts with TrajectoryBuilder
+# ---------------------------------------------------------------------------
+
+
+def generate(builder: TrajectoryBuilder, sample_count: int, seed: int) -> None:
+    """Feed all trajectory events to *builder* at once (batch mode)."""
+    random.seed(seed)
+
+    for si in range(sample_count):
+        uid = f"task-{si:04d}-{random.randint(1000, 9999)}"
+        scenario = SCENARIOS[si % len(SCENARIOS)]
+        sample_success = random.random() < 0.35
+        session_count = random.randint(3, 5)
+
+        for sess_i in range(session_count):
+            traj_count = random.randint(1, 4)
+            for ti in range(traj_count):
+                events = build_trajectory_events(
+                    uid=uid,
+                    sample_index=si,
+                    session_index=sess_i,
+                    trajectory_index=ti,
+                    scenario=scenario,
+                    sample_success=sample_success,
+                    is_last_in_session=(ti == traj_count - 1),
+                )
+                for event in events:
+                    builder.feed(event)
+
+    print(f"Generated {sample_count} samples.")
+
+
+def stream(
+    builder: TrajectoryBuilder,
+    sample_count: int,
+    interval: float,
+    seed: int,
+) -> None:
+    """Feed trajectory events incrementally (step by step with sleeps)."""
     import time as _time  # noqa: E402
 
     random.seed(seed)
-    uids = []
+    uids: list[str] = []
     for si in range(sample_count):
-        uid = f"task-{si:04d}-{random.randint(1000, 9999)}"
-        uids.append(uid)
-        if not _Path(output_dir, uid).exists():
-            FileSampleRecord.create(output_dir, uid=uid, sample_index=si)
+        uids.append(f"task-{si:04d}-{random.randint(1000, 9999)}")
 
     sample_success = [random.random() < 0.35 for _ in range(sample_count)]
     session_counts = [random.randint(3, 5) for _ in range(sample_count)]
     session_counts[0] = 2
 
-    queue: list[tuple[int, int, int, int, bool, int]] = []
-    # Build per-session trajectory lists, then interleave round-robin
-    # so trajectories grow across sessions gradually rather than completing
-    # one session at a time.
-    session_queues: list[list[tuple]] = []
+    # Build per-session trajectory event lists, then interleave round-robin.
+    session_queues: list[list[tuple[int, int, int, list[dict[str, Any]]]]] = []
     for si in range(sample_count):
         for sess_i in range(session_counts[si]):
             traj_count = random.randint(1, 4)
-            task = [
-                (si, sess_i, ti, traj_count, sample_success[si], si % len(SCENARIOS))
-                for ti in range(traj_count)
-            ]
-            session_queues.append(task)
+            session_events: list[tuple[int, int, int, list[dict[str, Any]]]] = []
+            for ti in range(traj_count):
+                events = build_trajectory_events(
+                    uid=uids[si],
+                    sample_index=si,
+                    session_index=sess_i,
+                    trajectory_index=ti,
+                    scenario=SCENARIOS[si % len(SCENARIOS)],
+                    sample_success=sample_success[si],
+                    is_last_in_session=(ti == traj_count - 1),
+                )
+                session_events.append((si, sess_i, ti, events))
+            session_queues.append(session_events)
 
-    # Round-robin interleave across all sessions
-    max_trajs_per = max(len(q) for q in session_queues)
-    for round_i in range(max_trajs_per):
+    # Interleave: one trajectory's events per round across all sessions
+    max_trajs = max(len(q) for q in session_queues)
+    event_queue: list[tuple[int, int, int, dict[str, Any]]] = []
+    for round_i in range(max_trajs):
         for q in session_queues:
             if round_i < len(q):
-                queue.append(q[round_i])
+                si, sess_i, ti, events = q[round_i]
+                for ev in events:
+                    event_queue.append((si, sess_i, ti, ev))
 
-    estimated = len(queue) * interval
+    total_trajs = sum(len(q) for q in session_queues)
     print(
-        f"Streaming {len(queue)} trajectories across {sample_count} samples (~{estimated:.0f}s)."
+        f"Streaming {total_trajs} trajectories across {sample_count} samples "
+        f"(~{len(event_queue) * interval:.0f}s)."
     )
     print("Open http://localhost:8080 to watch.\n")
 
-    for idx, (si, sess_i, ti, traj_count, success, scenario_idx) in enumerate(queue):
+    for idx, (si, sess_i, ti, event) in enumerate(event_queue):
         uid = uids[si]
-        scenario = SCENARIOS[scenario_idx]
-        fs = FileSampleRecord.open(output_dir, uid=uid)
-        fs.new_trajectory(session_index=sess_i)
-
-        # Generate step data first, then write step by step with sleeps
-        steps, finish_reason, status, reward = build_trajectory_steps(
-            scenario,
-            success,
-            is_last_in_session=(ti == traj_count - 1),
-        )
-        for step_i, step in enumerate(steps):
-            fs.add_step(sess_i, ti, step)
+        builder.feed(event)
+        etype = event["event"]
+        if etype == "trajectory_begin":
             print(
-                f"[{idx + 1}/{len(queue)}] {uid[:12]} s={sess_i} t={ti} step={step_i + 1}/{len(steps)}"
+                f"[event {idx + 1}/{len(event_queue)}] "
+                f"{uid[:12]} s={sess_i} t={ti} begin"
             )
-            if step_i < len(steps) - 1:
-                _time.sleep(interval)
-
-        fs.finish_trajectory(sess_i, ti, finish_reason, status)
-        fs.set_trajectory_reward(sess_i, ti, reward)
-        r = "+" if reward > 0 else " "
-        print(f"[{idx + 1}/{len(queue)}] {uid[:12]} s={sess_i} t={ti} done {r}")
-        if idx < len(queue) - 1:
+        else:
+            print(
+                f"[event {idx + 1}/{len(event_queue)}] "
+                f"{uid[:12]} s={sess_i} t={ti} "
+                f"step={event.get('step_index', '?')} "
+                f"fr={event.get('finish_reason', '?')}"
+            )
+        if idx < len(event_queue) - 1:
             _time.sleep(interval)
-    print(f"\nDone. {len(queue)} trajectories generated.")
+
+    print(f"\nDone. {total_trajs} trajectories generated.")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate fake FileSampleRecord data")
-    parser.add_argument("output_dir", help="Output directory for FileSampleRecord data")
+    parser = argparse.ArgumentParser(
+        description="Generate trajectory events through TrajectoryBuilder"
+    )
+    parser.add_argument("output_dir", help="Output directory for trajectory data")
     parser.add_argument(
         "--samples", type=int, default=12, help="Number of samples (default: 12)"
     )
@@ -537,7 +561,7 @@ def main() -> None:
     parser.add_argument(
         "--stream",
         action="store_true",
-        help="Stream data incrementally (1 trajectory/s)",
+        help="Stream data incrementally (step by step with sleeps)",
     )
     parser.add_argument(
         "--no-clean",
@@ -547,8 +571,13 @@ def main() -> None:
     parser.add_argument(
         "--interval",
         type=float,
-        default=1.0,
-        help="Seconds between trajectories (default: 1.0)",
+        default=0.3,
+        help="Seconds between events in stream mode (default: 0.3)",
+    )
+    parser.add_argument(
+        "--memory",
+        action="store_true",
+        help="Use in-memory SampleRecord instead of FileSampleRecord",
     )
     args = parser.parse_args()
 
@@ -558,10 +587,26 @@ def main() -> None:
         shutil.rmtree(args.output_dir)
         print(f"Cleared {args.output_dir}")
 
-    if args.stream:
-        stream(args.output_dir, args.samples, args.interval, args.seed)
+    # Build the builder -- the only place that knows about storage backends.
+    if args.memory:
+        from rl_insight.experimental.samples import SampleRecord  # noqa: E402
+
+        builder = TrajectoryBuilder(
+            sample_factory=lambda uid, si: SampleRecord.create(uid=uid, sample_index=si)  # noqa: E731
+        )
     else:
-        generate(args.output_dir, args.samples, args.seed)
+        from rl_insight.experimental.samples import FileSampleRecord  # noqa: E402
+
+        builder = TrajectoryBuilder(
+            sample_factory=lambda uid, si: FileSampleRecord.create(  # noqa: E731
+                args.output_dir, uid=uid, sample_index=si
+            )
+        )
+
+    if args.stream:
+        stream(builder, args.samples, args.interval, args.seed)
+    else:
+        generate(builder, args.samples, args.seed)
 
     print("\nStart the viewer:")
     print(f"  python rl_insight/experimental/server.py {args.output_dir} --port 8080")
