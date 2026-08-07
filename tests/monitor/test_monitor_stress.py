@@ -41,7 +41,10 @@ from typing import Any
 import ray
 import rl_insight as insight
 import rl_insight.api as _api
-from rl_insight.client.ray_monitor_client import _current_job_actor_name, MonitorRayClient
+from rl_insight.client.ray_monitor_client import (
+    _current_job_actor_name,
+    MonitorRayClient,
+)
 from rl_insight.utils.constants import MonitorRayActor
 from rl_insight.utils import MonitorEventKind
 
@@ -280,67 +283,75 @@ def _process_worker(
     if api_name == "counter":
 
         def _emit(seq: int) -> None:
-            client.apply_event({
-                "kind": MonitorEventKind.COUNTER,
-                "name": "train_step_total",
-                "documentation": "Counter: total training steps",
-                "value": 1.0,
-                "labels": {
-                    "project": "verl",
-                    "experiment_name": "ppo-stress-test",
-                    "worker": "stress",
-                },
-            })
+            client.apply_event(
+                {
+                    "kind": MonitorEventKind.COUNTER,
+                    "name": "train_step_total",
+                    "documentation": "Counter: total training steps",
+                    "value": 1.0,
+                    "labels": {
+                        "project": "verl",
+                        "experiment_name": "ppo-stress-test",
+                        "worker": "stress",
+                    },
+                }
+            )
 
     elif api_name == "gauge":
 
         def _emit(seq: int) -> None:
-            client.apply_event({
-                "kind": MonitorEventKind.GAUGE,
-                "name": "reward_mean",
-                "documentation": "Gauge: mean reward value",
-                "value": float(seq % 1000),
-                "labels": {
-                    "project": "verl",
-                    "experiment_name": "ppo-stress-test",
-                    "worker": "stress",
-                },
-            })
+            client.apply_event(
+                {
+                    "kind": MonitorEventKind.GAUGE,
+                    "name": "reward_mean",
+                    "documentation": "Gauge: mean reward value",
+                    "value": float(seq % 1000),
+                    "labels": {
+                        "project": "verl",
+                        "experiment_name": "ppo-stress-test",
+                        "worker": "stress",
+                    },
+                }
+            )
 
     elif api_name == "histogram":
 
         def _emit(seq: int) -> None:
-            client.apply_event({
-                "kind": MonitorEventKind.HISTOGRAM,
-                "name": "step_latency_ms",
-                "documentation": "Histogram: step latency in ms",
-                "value": float(200 + seq % 100),
-                "labels": {
-                    "project": "verl",
-                    "experiment_name": "ppo-stress-test",
-                    "worker": "stress",
-                },
-            })
+            client.apply_event(
+                {
+                    "kind": MonitorEventKind.HISTOGRAM,
+                    "name": "step_latency_ms",
+                    "documentation": "Histogram: step latency in ms",
+                    "value": float(200 + seq % 100),
+                    "labels": {
+                        "project": "verl",
+                        "experiment_name": "ppo-stress-test",
+                        "worker": "stress",
+                    },
+                }
+            )
 
     elif api_name == "trace":
 
         def _emit(seq: int) -> None:
             now_ns = _time.time_ns()
-            client.apply_event({
-                "kind": MonitorEventKind.TRACE,
-                "name": "rollout_generate",
-                "start_time_ns": now_ns,
-                "end_time_ns": now_ns,
-                "attributes": {
-                    "process_id": _process_id,
-                    "project": "verl",
-                    "experiment_name": "ppo-stress-test",
-                    "monitor.trace_segment": "state_interval",
-                    "state_name": "rollout_generate",
-                    "state_lane_id": "stress",
-                    "step": seq,
-                },
-            })
+            client.apply_event(
+                {
+                    "kind": MonitorEventKind.TRACE,
+                    "name": "rollout_generate",
+                    "start_time_ns": now_ns,
+                    "end_time_ns": now_ns,
+                    "attributes": {
+                        "process_id": _process_id,
+                        "project": "verl",
+                        "experiment_name": "ppo-stress-test",
+                        "monitor.trace_segment": "state_interval",
+                        "state_name": "rollout_generate",
+                        "state_lane_id": "stress",
+                        "step": seq,
+                    },
+                }
+            )
 
     else:
         result_queue.put({"submitted": 0, "submitted_sum": 0.0, "latencies": []})
@@ -418,7 +429,14 @@ def run_concurrency_test(
     for _ in range(num_procs):
         p = ctx.Process(
             target=_process_worker,
-            args=(api_name, num_threads, STRESS_DURATION_S, track_sum, result_queue, hub_actor_name),
+            args=(
+                api_name,
+                num_threads,
+                STRESS_DURATION_S,
+                track_sum,
+                result_queue,
+                hub_actor_name,
+            ),
         )
         processes.append(p)
         p.start()
@@ -631,8 +649,7 @@ def _verify_stress_aggregate(
 
     failures = 0
     for label, ok, exp, act in checks:
-        mark = "PASS" if ok else "FAIL"
-        print(f"    [{mark}] {label}: expected={exp}, actual={act}")
+        print(f"    [{'PASS' if ok else 'FAIL'}] {label}: expected={exp}, actual={act}")
         if not ok:
             failures += 1
 
@@ -759,7 +776,6 @@ def _verify_data_consistency(
 
     failures = 0
     for label, ok, exp, act in checks:
-        mark = "PASS" if ok else "FAIL"
         print(f"    [{'PASS' if ok else 'FAIL'}] {label}: expected={exp}, actual={act}")
         if not ok:
             failures += 1
@@ -926,8 +942,11 @@ def main() -> int:
                     continue
 
                 result = run_concurrency_test(
-                    api_name, num_procs, num_threads,
-                    hub_actor_name=hub_actor_name, track_sum=track,
+                    api_name,
+                    num_procs,
+                    num_threads,
+                    hub_actor_name=hub_actor_name,
+                    track_sum=track,
                 )
                 all_results.append(result)
                 completed.add(key)
@@ -974,8 +993,11 @@ def main() -> int:
                 continue
 
             result = run_concurrency_test(
-                api_name, 1, num_threads,
-                hub_actor_name=hub_actor_name, track_sum=track,
+                api_name,
+                1,
+                num_threads,
+                hub_actor_name=hub_actor_name,
+                track_sum=track,
             )
             all_results.append(result)
             completed.add(key)
@@ -1022,8 +1044,11 @@ def main() -> int:
                 continue
 
             result = run_concurrency_test(
-                api_name, num_procs, 10,
-                hub_actor_name=hub_actor_name, track_sum=track,
+                api_name,
+                num_procs,
+                10,
+                hub_actor_name=hub_actor_name,
+                track_sum=track,
             )
             all_results.append(result)
             completed.add(key)
