@@ -41,6 +41,9 @@ from typing import Any
 import ray
 import rl_insight as insight
 import rl_insight.api as _api
+from rl_insight.client.ray_monitor_client import _current_job_actor_name, MonitorRayClient
+from rl_insight.utils.constants import MonitorRayActor
+from rl_insight.utils import MonitorEventKind
 
 
 # ---------------------------------------------------------------------------
@@ -161,12 +164,22 @@ def _histogram_sum_for(n: int) -> float:
 
 
 def _hub_events_count() -> int:
-    try:
-        actor = ray.get_actor("RLInsightMonitorHub", namespace="rl-insight-monitor")
-        status = ray.get(actor.get_status.remote())
-        return int(status.get("events_applied", 0))
-    except Exception:
-        return -1
+    """Query the hub actor's events_applied counter.
+
+    Tries the job-scoped actor name first (post-#112), then falls back
+    to the bare constant name for backwards compatibility.
+    """
+    namespace = MonitorRayActor.NAMESPACE
+    for actor_name in (_current_job_actor_name(), MonitorRayActor.NAME):
+        try:
+            actor = ray.get_actor(actor_name, namespace=namespace)
+            status = ray.get(actor.get_status.remote())
+            return int(status.get("events_applied", 0))
+        except ValueError:
+            continue
+        except Exception:
+            return -1
+    return -1
 
 
 def _promql_value(service_ip: str, metric: str) -> float | None:
@@ -229,19 +242,22 @@ def _process_worker(
     duration_s: float,
     track_sum: bool,
     result_queue: mp.Queue,
+    hub_actor_name: str,
 ) -> None:
-    """Entry point for each child process. Initializes ray/insight, spawns threads.
+    """Entry point for each child process. Connects to the existing hub, spawns threads.
 
-    Runs in a spawned subprocess, so all imports and init must be self-contained.
+    Unlike the main process, child processes do NOT create their own hub
+    (that would collide on the Prometheus metrics port).  Instead they
+    look up the hub actor created by the main process and submit events
+    directly through ``MonitorRayClient``.
     """
-    import os
+    import os as _os
     import time as _time
     from concurrent.futures import ThreadPoolExecutor
 
     import ray as _ray
-    import rl_insight as _insight
 
-    # Init Ray in this child process
+    # Connect to Ray (shares the cluster with the main process)
     try:
         _ray.init(
             address="auto", namespace="rl-insight-monitor", ignore_reinit_error=True
@@ -249,52 +265,83 @@ def _process_worker(
     except ConnectionError:
         _ray.init(namespace="rl-insight-monitor", ignore_reinit_error=True)
 
-    os.environ.setdefault("RL_INSIGHT_SERVER_URL", "http://127.0.0.1:18080")
+    # Look up the main process's hub — do NOT create a new one
+    try:
+        hub_handle = _ray.get_actor(hub_actor_name, namespace=MonitorRayActor.NAMESPACE)
+        client = MonitorRayClient(hub_handle)
+    except Exception:
+        result_queue.put({"submitted": 0, "submitted_sum": 0.0, "latencies": []})
+        return
 
-    _service_ip = (
-        os.environ.get("RL_INSIGHT_SERVICE_IP", "127.0.0.1").strip() or "127.0.0.1"
-    )
-    _insight.init(
-        project="verl",
-        experiment_name="ppo-stress-test",
-        config={"server": {"service_ip": _service_ip}},
-    )
+    _process_id = str(_os.getpid())
 
-    # Build emitter from api_name (lambdas cannot be pickled across spawn)
+    # Build emitter using direct client.apply_event (bypasses rl_insight API
+    # so we never call init() which would try to create a second hub).
     if api_name == "counter":
 
         def _emit(seq: int) -> None:
-            _insight.metric_count(
-                "train_step_total",
-                amount=1,
-                documentation="Counter: total training steps",
-                worker="stress",
-            )
+            client.apply_event({
+                "kind": MonitorEventKind.COUNTER,
+                "name": "train_step_total",
+                "documentation": "Counter: total training steps",
+                "value": 1.0,
+                "labels": {
+                    "project": "verl",
+                    "experiment_name": "ppo-stress-test",
+                    "worker": "stress",
+                },
+            })
+
     elif api_name == "gauge":
 
         def _emit(seq: int) -> None:
-            _insight.metric_gauge(
-                "reward_mean",
-                value=float(seq % 1000),
-                documentation="Gauge: mean reward value",
-                worker="stress",
-            )
+            client.apply_event({
+                "kind": MonitorEventKind.GAUGE,
+                "name": "reward_mean",
+                "documentation": "Gauge: mean reward value",
+                "value": float(seq % 1000),
+                "labels": {
+                    "project": "verl",
+                    "experiment_name": "ppo-stress-test",
+                    "worker": "stress",
+                },
+            })
+
     elif api_name == "histogram":
 
         def _emit(seq: int) -> None:
-            _insight.metric_histogram(
-                "step_latency_ms",
-                value=float(200 + seq % 100),
-                documentation="Histogram: step latency in ms",
-                worker="stress",
-            )
+            client.apply_event({
+                "kind": MonitorEventKind.HISTOGRAM,
+                "name": "step_latency_ms",
+                "documentation": "Histogram: step latency in ms",
+                "value": float(200 + seq % 100),
+                "labels": {
+                    "project": "verl",
+                    "experiment_name": "ppo-stress-test",
+                    "worker": "stress",
+                },
+            })
+
     elif api_name == "trace":
 
         def _emit(seq: int) -> None:
-            with _insight.trace_state(
-                "rollout_generate", state_lane_id="stress", step=seq
-            ):
-                pass
+            now_ns = _time.time_ns()
+            client.apply_event({
+                "kind": MonitorEventKind.TRACE,
+                "name": "rollout_generate",
+                "start_time_ns": now_ns,
+                "end_time_ns": now_ns,
+                "attributes": {
+                    "process_id": _process_id,
+                    "project": "verl",
+                    "experiment_name": "ppo-stress-test",
+                    "monitor.trace_segment": "state_interval",
+                    "state_name": "rollout_generate",
+                    "state_lane_id": "stress",
+                    "step": seq,
+                },
+            })
+
     else:
         result_queue.put({"submitted": 0, "submitted_sum": 0.0, "latencies": []})
         return
@@ -359,6 +406,7 @@ def run_concurrency_test(
     api_name: str,
     num_procs: int,
     num_threads: int,
+    hub_actor_name: str,
     track_sum: bool = False,
 ) -> ConcurrencyResult:
     hub_before = _hub_events_count()
@@ -370,7 +418,7 @@ def run_concurrency_test(
     for _ in range(num_procs):
         p = ctx.Process(
             target=_process_worker,
-            args=(api_name, num_threads, STRESS_DURATION_S, track_sum, result_queue),
+            args=(api_name, num_threads, STRESS_DURATION_S, track_sum, result_queue, hub_actor_name),
         )
         processes.append(p)
         p.start()
@@ -468,7 +516,8 @@ def print_api_summary(all_results: list[ConcurrencyResult]) -> None:
         )
 
 
-def print_analysis(all_results: list[ConcurrencyResult]) -> None:
+def print_analysis(all_results: list[ConcurrencyResult]) -> int:
+    """Print analysis summary and return the number of failing combinations."""
     print(f"\n{'=' * 70}")
     print("  Analysis")
     print(f"{'=' * 70}")
@@ -484,6 +533,7 @@ def print_analysis(all_results: list[ConcurrencyResult]) -> None:
   single-actor design, not a bug.  The checks below verify that
   despite queue delays, all data reaches Prometheus intact.
 """)
+    return failures
 
 
 # ---------------------------------------------------------------------------
@@ -491,21 +541,27 @@ def print_analysis(all_results: list[ConcurrencyResult]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _verify_grafana_frontend(service_ip: str) -> None:
+def _verify_grafana_frontend(service_ip: str) -> int:
+    """Return number of failed checks."""
+    failures = 0
     print(f"\n{'=' * 70}")
     print("  Grafana Frontend")
     print(f"{'=' * 70}")
     ok = _grafana_healthy(service_ip)
     print(f"  http://{service_ip}:{GRAFANA_PORT}  {'OK' if ok else 'UNREACHABLE'}")
     if not ok:
-        return
+        failures += 1
+        return failures
     for panel, query in [
         ("metric_count", f"{NS}_train_step_total"),
         ("metric_gauge", f"{NS}_reward_mean"),
         ("metric_histogram", f"{NS}_step_latency_ms_bucket"),
     ]:
         has = _prometheus_has_data(service_ip, query)
+        if not has:
+            failures += 1
         print(f"    [{'PASS' if has else 'FAIL'}] {panel}")
+    return failures
 
 
 # ---------------------------------------------------------------------------
@@ -517,7 +573,8 @@ def _verify_stress_aggregate(
     service_ip: str,
     all_results: list[ConcurrencyResult],
     prometheus_before: dict[str, float],
-) -> None:
+) -> int:
+    """Return number of failed checks."""
     print(f"\n{'=' * 70}")
     print("  Stress Data Aggregate Verification  (exact match)")
     print(f"{'=' * 70}")
@@ -572,18 +629,19 @@ def _verify_stress_aggregate(
     else:
         checks.append(("histogram sum", False, f"{hist_sum:.0f}", "no data"))
 
-    passed = 0
+    failures = 0
     for label, ok, exp, act in checks:
         mark = "PASS" if ok else "FAIL"
         print(f"    [{mark}] {label}: expected={exp}, actual={act}")
-        if ok:
-            passed += 1
+        if not ok:
+            failures += 1
 
     print()
-    if passed == len(checks):
+    if failures == 0:
         print("  All checks passed.  Every event accounted for.")
     else:
-        print(f"  {len(checks) - passed} checks FAILED.")
+        print(f"  {failures} checks FAILED.")
+    return failures
 
 
 # ---------------------------------------------------------------------------
@@ -593,7 +651,8 @@ def _verify_stress_aggregate(
 
 def _verify_data_consistency(
     service_ip: str, prometheus_before: dict[str, float]
-) -> None:
+) -> int:
+    """Return number of failed checks."""
     print(f"\n{'=' * 70}")
     print("  End-to-End Data Consistency (known values)")
     print(f"{'=' * 70}")
@@ -698,14 +757,19 @@ def _verify_data_consistency(
     else:
         checks.append(("histogram sum", False, str(int(sum(HIST_VALUES))), "no data"))
 
-    passed = sum(1 for _, ok, _, _ in checks if ok)
+    failures = 0
     for label, ok, exp, act in checks:
+        mark = "PASS" if ok else "FAIL"
         print(f"    [{'PASS' if ok else 'FAIL'}] {label}: expected={exp}, actual={act}")
+        if not ok:
+            failures += 1
+
     print()
-    if passed == len(checks):
+    if failures == 0:
         print("  All checks passed.  Count AND content exact match.")
     else:
-        print(f"  {len(checks) - passed} checks FAILED.")
+        print(f"  {failures} checks FAILED.")
+    return failures
 
 
 # ---------------------------------------------------------------------------
@@ -802,7 +866,13 @@ def main() -> int:
     if not _api._STATE.enabled:
         print("  FAIL: monitoring not enabled.")
         return 1
-    print(f"  Ray: OK  |  Monitor: OK  |  Hub events: {_hub_events_count()}")
+
+    # Remember the job-scoped actor name so child processes can connect
+    # to the *same* hub instead of trying to create their own (which
+    # would collide on the Prometheus metrics port).
+    hub_actor_name = _current_job_actor_name()
+    hub_events = _hub_events_count()
+    print(f"  Ray: OK  |  Monitor: OK  |  Hub events: {hub_events}")
 
     # -- Prometheus baseline snapshot (before stress) --
     # Use saved baseline from checkpoint if resuming, otherwise capture fresh
@@ -833,6 +903,8 @@ def main() -> int:
     print("  Stress Test Results  (P=processes, T=threads, queue=p95-p50)")
     print(f"{'=' * 70}")
 
+    total_failures = 0
+
     for api_name in api_order:
         track = api_name == "histogram"
         print(f"\n  -- {api_name} --")
@@ -842,7 +914,6 @@ def main() -> int:
             for num_threads in THREAD_LEVELS:
                 key = _combo_key(api_name, num_procs, num_threads)
                 if key in completed:
-                    # Already done: find the existing result and print it
                     existing = [
                         r
                         for r in all_results
@@ -855,13 +926,13 @@ def main() -> int:
                     continue
 
                 result = run_concurrency_test(
-                    api_name, num_procs, num_threads, track_sum=track
+                    api_name, num_procs, num_threads,
+                    hub_actor_name=hub_actor_name, track_sum=track,
                 )
                 all_results.append(result)
                 completed.add(key)
                 print_row(result)
 
-                # Save checkpoint after each combination
                 if api_name not in ckpt["results"]:
                     ckpt["results"][api_name] = []
                 ckpt["results"][api_name].append(
@@ -884,7 +955,6 @@ def main() -> int:
                 )
                 ckpt["completed"] = list(completed)
                 _save_checkpoint(ckpt)
-
                 time.sleep(1)
 
         # -- Extra: 1-process high-thread stress --
@@ -903,12 +973,14 @@ def main() -> int:
                     print_row(existing[0])
                 continue
 
-            result = run_concurrency_test(api_name, 1, num_threads, track_sum=track)
+            result = run_concurrency_test(
+                api_name, 1, num_threads,
+                hub_actor_name=hub_actor_name, track_sum=track,
+            )
             all_results.append(result)
             completed.add(key)
             print_row(result)
 
-            # Save checkpoint
             if api_name not in ckpt["results"]:
                 ckpt["results"][api_name] = []
             ckpt["results"][api_name].append(
@@ -949,12 +1021,14 @@ def main() -> int:
                     print_row(existing[0])
                 continue
 
-            result = run_concurrency_test(api_name, num_procs, 10, track_sum=track)
+            result = run_concurrency_test(
+                api_name, num_procs, 10,
+                hub_actor_name=hub_actor_name, track_sum=track,
+            )
             all_results.append(result)
             completed.add(key)
             print_row(result)
 
-            # Save checkpoint
             if api_name not in ckpt["results"]:
                 ckpt["results"][api_name] = []
             ckpt["results"][api_name].append(
@@ -983,24 +1057,28 @@ def main() -> int:
     print_api_summary(all_results)
 
     # -- Analysis --
-    print_analysis(all_results)
+    stress_failures = print_analysis(all_results)
+    total_failures += stress_failures
 
     # -- Stress aggregate (exact count + sum) --
-    _verify_stress_aggregate(service_ip, all_results, prom_before)
+    total_failures += _verify_stress_aggregate(service_ip, all_results, prom_before)
 
     # -- Grafana --
-    _verify_grafana_frontend(service_ip)
+    total_failures += _verify_grafana_frontend(service_ip)
 
     # -- Data consistency (known values) --
-    _verify_data_consistency(service_ip, prom_before)
+    total_failures += _verify_data_consistency(service_ip, prom_before)
 
     # -- Full results dump --
     print_full_results(all_results)
 
     print(f"\n{'=' * 70}")
-    print("  Done")
+    if total_failures == 0:
+        print("  Done — all checks passed.")
+    else:
+        print(f"  Done — {total_failures} check(s) FAILED.")
     print(f"{'=' * 70}\n")
-    return 0
+    return 1 if total_failures > 0 else 0
 
 
 if __name__ == "__main__":
