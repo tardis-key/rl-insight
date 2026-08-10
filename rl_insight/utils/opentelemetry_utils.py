@@ -80,3 +80,42 @@ class OpenTelemetryTraceCollector:
             attributes=attributes,
         )
         span.end(end_time=end_time_ns)
+
+
+def tempo_export(
+    project: str | None = None,
+    experiment_name: str | None = None,
+    output_dir: str | None = None,
+    tempo_url: str = "http://127.0.0.1:3200",
+) -> int:
+    """Export Tempo traces filtered by project/experiment span attributes.
+
+    Uses TraceQL search with pagination, fetches full trace JSON, saves as OTLP JSON.
+
+    Args:
+        project: Filter by span.project attribute (None or "*" means no filter).
+        experiment_name: Filter by span.experiment_name attribute (None or "*" means no filter).
+        output_dir: Directory to write traces.otlp.json.
+        tempo_url: Tempo HTTP query API base URL.
+
+    Returns:
+        0 on success, non-zero on failure.
+    """
+    raise NotImplementedError
+
+
+
+def tempo_import(
+    input_dir: str,
+    otlp_url: str = "http://127.0.0.1:4318/v1/traces",
+) -> int:
+    """Import Tempo traces from an OTLP JSON file by replaying to the target OTLP endpoint.
+
+    Args:
+        input_dir: Directory containing tempo/traces.otlp.json.
+        otlp_url: Target Tempo OTLP HTTP endpoint.
+
+    Returns:
+        0 on success, non-zero on failure.
+    """
+    raise NotImplementedError

@@ -25,8 +25,10 @@ from .constants import (
     PrometheusScrape,
 )
 from .monitor_config_loader import load_monitor_config, load_server_config_file
-from .opentelemetry_utils import OpenTelemetryTraceCollector
+from .opentelemetry_utils import OpenTelemetryTraceCollector, tempo_export, tempo_import
 from .prometheus_utils import (
+    prometheus_export,
+    prometheus_import,
     MetricRegistry,
     PrometheusTarget,
     PrometheusTargetStore,
@@ -44,6 +46,10 @@ __all__ = [
     "MonitorRayActor",
     "MonitorServer",
     "OpenTelemetryTraceCollector",
+    "prometheus_export",
+    "prometheus_import",
+    "tempo_export",
+    "tempo_import",
     "PrometheusScrape",
     "PrometheusTarget",
     "PrometheusTargetStore",

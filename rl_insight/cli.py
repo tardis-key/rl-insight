@@ -47,6 +47,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_server_parser(subparsers)
+    _add_data_parser(subparsers)
     return parser
 
 
@@ -138,3 +139,162 @@ def _add_common_config_args(parser: argparse.ArgumentParser) -> None:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def _add_data_parser(subparsers: argparse._SubParsersAction) -> None:
+    """Attach ``export`` and ``import`` subcommands for data migration."""
+    export_parser = subparsers.add_parser(
+        "export",
+        help="Export Prometheus metrics and Tempo traces by project/experiment.",
+    )
+    export_parser.add_argument(
+        "--project",
+        type=str,
+        default=None,
+        help="Filter by project label (default: *, match all).",
+    )
+    export_parser.add_argument(
+        "--experiment",
+        type=str,
+        default=None,
+        help="Filter by experiment_name label (default: *, match all).",
+    )
+    export_parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="Output directory for exported data.",
+    )
+    export_parser.add_argument(
+        "--prometheus-url",
+        type=str,
+        default="http://127.0.0.1:9090",
+        help="Prometheus HTTP API URL (default: http://127.0.0.1:9090).",
+    )
+    export_parser.add_argument(
+        "--tempo-url",
+        type=str,
+        default="http://127.0.0.1:3200",
+        help="Tempo HTTP query API URL (default: http://127.0.0.1:3200).",
+    )
+    export_parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Prometheus TSDB data directory. Auto-detected if not set.",
+    )
+    export_parser.add_argument(
+        "--promtool-bin",
+        type=str,
+        default="promtool",
+        help="Path to promtool binary (default: promtool from PATH).",
+    )
+    export_parser.set_defaults(func=_handle_export)
+
+    import_parser = subparsers.add_parser(
+        "import",
+        help="Import previously exported data into the current RL-Insight instance.",
+    )
+    import_parser.add_argument(
+        "--input",
+        type=Path,
+        required=True,
+        help="Directory containing exported data.",
+    )
+    import_parser.add_argument(
+        "--prometheus-url",
+        type=str,
+        default="http://127.0.0.1:9090",
+        help="Target Prometheus HTTP API URL (default: http://127.0.0.1:9090).",
+    )
+    import_parser.add_argument(
+        "--tempo-otlp-url",
+        type=str,
+        default="http://127.0.0.1:4318/v1/traces",
+        help="Target Tempo OTLP HTTP endpoint (default: http://127.0.0.1:4318/v1/traces).",
+    )
+    import_parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Target Prometheus TSDB data directory. Auto-detected if not set.",
+    )
+    import_parser.set_defaults(func=_handle_import)
+
+
+def _handle_export(args: argparse.Namespace) -> int:
+    """Run data export for Prometheus and Tempo."""
+    from .utils.prometheus_utils import prometheus_export as _prom_export
+    from .utils.opentelemetry_utils import tempo_export as _tempo_export
+
+    project = args.project or "*"
+    experiment = args.experiment or "*"
+
+    print(f"Exporting project={project}, experiment={experiment}")
+    print()
+
+    # Prometheus export
+    print("--- Prometheus Export ---")
+    ret = _prom_export(
+        project=project,
+        experiment_name=experiment,
+        output_dir=str(args.output),
+        prometheus_url=args.prometheus_url,
+        data_dir=str(args.data_dir) if args.data_dir else None,
+        promtool_bin=args.promtool_bin,
+    )
+    if ret != 0:
+        print("Prometheus export FAILED")
+        return ret
+
+    # Tempo export
+    print()
+    print("--- Tempo Export ---")
+    ret = _tempo_export(
+        project=project,
+        experiment_name=experiment,
+        output_dir=str(args.output),
+        tempo_url=args.tempo_url,
+    )
+    if ret != 0:
+        print("Tempo export FAILED")
+        return ret
+
+    print()
+    print(f"Export complete: {args.output}")
+    return 0
+
+
+def _handle_import(args: argparse.Namespace) -> int:
+    """Run data import for Prometheus and Tempo."""
+    from .utils.prometheus_utils import prometheus_import as _prom_import
+    from .utils.opentelemetry_utils import tempo_import as _tempo_import
+
+    print(f"Importing from {args.input}")
+    print()
+
+    # Prometheus import
+    print("--- Prometheus Import ---")
+    ret = _prom_import(
+        input_dir=str(args.input),
+        prometheus_url=args.prometheus_url,
+        data_dir=str(args.data_dir) if args.data_dir else None,
+    )
+    if ret != 0:
+        print("Prometheus import FAILED")
+        return ret
+
+    # Tempo import
+    print()
+    print("--- Tempo Import ---")
+    ret = _tempo_import(
+        input_dir=str(args.input),
+        otlp_url=args.tempo_otlp_url,
+    )
+    if ret != 0:
+        print("Tempo import FAILED")
+        return ret
+
+    print()
+    print(f"Import complete from {args.input}")
+    return 0

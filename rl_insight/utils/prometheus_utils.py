@@ -25,6 +25,9 @@ from pathlib import Path
 from typing import Any
 
 import requests
+import shutil
+import subprocess
+import tempfile
 import yaml
 from omegaconf import DictConfig, OmegaConf
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
@@ -40,6 +43,8 @@ __all__ = [
     "MetricRegistry",
     "PrometheusTarget",
     "PrometheusTargetStore",
+    "prometheus_export",
+    "prometheus_import",
     "start_metrics_http_server",
     "update_prometheus_config",
 ]
@@ -362,3 +367,144 @@ def _build_target_payload(
             }
         targets.append(item)
     return targets
+
+
+def prometheus_export(
+    project: str | None = None,
+    experiment_name: str | None = None,
+    output_dir: str | None = None,
+    prometheus_url: str = "http://127.0.0.1:9090",
+    data_dir: str | None = None,
+    promtool_bin: str = "promtool",
+) -> int:
+    """Export Prometheus metrics filtered by project/experiment_name labels.
+
+    Uses snapshot API + promtool dump-openmetrics + label filtering + create-blocks-from.
+
+    Args:
+        project: Filter by project label (None or "*" means no filter).
+        experiment_name: Filter by experiment_name label (None or "*" means no filter).
+        output_dir: Directory to write the exported block.
+        prometheus_url: Prometheus HTTP API base URL.
+        data_dir: Prometheus TSDB data directory (--storage.tsdb.path). Auto-detected if None.
+        promtool_bin: Path to promtool binary.
+
+    Returns:
+        0 on success, non-zero on failure.
+    """
+
+    raise NotImplementedError
+def prometheus_import(
+    input_dir: str,
+    prometheus_url: str = "http://127.0.0.1:9090",
+    data_dir: str | None = None,
+) -> int:
+    """Import Prometheus TSDB blocks into a target instance.
+
+    Detects experiment_name conflicts and appends a timestamp suffix if needed.
+
+    Args:
+        input_dir: Directory containing prometheus/ subdirectory with TSDB blocks.
+        prometheus_url: Target Prometheus HTTP API base URL.
+        data_dir: Target Prometheus TSDB data directory. Auto-detected if None.
+
+    Returns:
+        0 on success, non-zero on failure.
+    """
+
+    raise NotImplementedError
+def _wild_to_none(value: str | None) -> str | None:
+    """Treat None and "*" as no filter."""
+    if value is None or value.strip() == "*":
+        return None
+    return value.strip()
+
+
+def _filter_openmetrics(text: str, project: str | None, experiment_name: str | None) -> str:
+    """Filter OpenMetrics text, keeping only series matching the given labels."""
+    lines = text.splitlines()
+    result: list[str] = []
+
+    for line in lines:
+        if line.startswith("#"):
+            result.append(line)
+            continue
+        if not line.strip():
+            result.append(line)
+            continue
+
+        if project is None and experiment_name is None:
+            result.append(line)
+            continue
+
+        label_part = _extract_labels(line)
+        if label_part is None:
+            result.append(line)
+            continue
+
+        match = True
+        if project is not None and f'project="{project}"' not in label_part:
+            match = False
+        if experiment_name is not None and f'experiment_name="{experiment_name}"' not in label_part:
+            match = False
+
+        if match:
+            result.append(line)
+
+    return "\n".join(result) + "\n"
+
+
+def _extract_labels(line: str) -> str | None:
+    """Extract the label portion {key="value",...} from a metric line."""
+    start = line.find("{")
+    end = line.find("}")
+    if start >= 0 and end > start:
+        return line[start:end + 1]
+    return None
+
+
+def _get_existing_experiments(prometheus_url: str) -> set[str]:
+    """Query Prometheus for existing experiment_name label values."""
+    import requests as _requests
+    try:
+        url = prometheus_url.rstrip("/") + "/api/v1/label/experiment_name/values"
+        resp = _requests.get(url, timeout=5)
+        resp.raise_for_status()
+        return set(resp.json().get("data", []))
+    except Exception:
+        logger.warning("Could not query existing experiment_names, assuming no conflicts")
+        return set()
+
+
+
+
+
+def _find_promtool() -> str | None:
+    """Find promtool binary in common locations."""
+    import shutil as _shutil
+    from pathlib import Path as _Path
+    # Check PATH
+    found = _shutil.which("promtool")
+    if found:
+        return found
+    # Check standard rl-insight install location
+    home = _Path.home()
+    for root in [home / ".rl-insight", _Path("/root/.rl-insight")]:
+        if root.exists():
+            for p in root.rglob("promtool"):
+                if p.is_file():
+                    return str(p)
+    return None
+
+
+def _read_manifest_experiment(input_parent) -> str | None:
+    """Read experiment_name from manifest.json in the input directory."""
+    import json as _json
+    manifest_file = input_parent / "manifest.json"
+    if manifest_file.exists():
+        try:
+            manifest = _json.loads(manifest_file.read_text())
+            return manifest.get("experiment_name")
+        except Exception:
+            pass
+    return None
