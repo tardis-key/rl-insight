@@ -493,6 +493,7 @@ def prometheus_import(
     input_dir: str,
     prometheus_url: str = "http://127.0.0.1:9090",
     data_dir: str | None = None,
+    force: bool = False,
 ) -> int:
     """Import Prometheus TSDB blocks into a target instance.
 
@@ -531,7 +532,17 @@ def prometheus_import(
         logger.error("No TSDB blocks found in %s", src)
         return 1
 
-    # TODO: experiment_name conflict detection
+    # Detect experiment_name conflicts via manifest
+    experiment_name = _read_manifest_experiment(src.parent)
+    if experiment_name and experiment_name != "*" and not force:
+        existing = _get_existing_experiments(prometheus_url)
+        if experiment_name in existing:
+            logger.error(
+                "experiment_name %r already exists in target Prometheus. "
+                "Use --force to overwrite.",
+                experiment_name,
+            )
+            return 1
 
     logger.info("Importing %d block(s) into %s", len(blocks), dst)
     for block in blocks:
@@ -609,6 +620,22 @@ def _extract_labels(line: str) -> str | None:
     return None
 
 
+def _get_existing_experiments(prometheus_url: str) -> set[str]:
+    """Query Prometheus for existing experiment_name label values."""
+    import requests as _requests
+    try:
+        url = prometheus_url.rstrip("/") + "/api/v1/label/experiment_name/values"
+        resp = _requests.get(url, timeout=5)
+        resp.raise_for_status()
+        return set(resp.json().get("data", []))
+    except Exception:
+        logger.warning("Could not query existing experiment_names, assuming no conflicts")
+        return set()
+
+
+
+
+
 def _find_promtool() -> str | None:
     """Find promtool binary in common locations."""
     import shutil as _shutil
@@ -626,3 +653,15 @@ def _find_promtool() -> str | None:
                     return str(p)
     return None
 
+
+def _read_manifest_experiment(input_parent) -> str | None:
+    """Read experiment_name from manifest.json in the input directory."""
+    import json as _json
+    manifest_file = input_parent / "manifest.json"
+    if manifest_file.exists():
+        try:
+            manifest = _json.loads(manifest_file.read_text())
+            return manifest.get("experiment_name")
+        except Exception:
+            pass
+    return None

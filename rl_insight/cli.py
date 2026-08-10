@@ -219,6 +219,11 @@ def _add_data_parser(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         help="Target Prometheus TSDB data directory. Auto-detected if not set.",
     )
+    import_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Skip conflict detection and overwrite existing data.",
+    )
     import_parser.set_defaults(func=_handle_import)
 
 
@@ -279,6 +284,7 @@ def _handle_import(args: argparse.Namespace) -> int:
         input_dir=str(args.input),
         prometheus_url=args.prometheus_url,
         data_dir=str(args.data_dir) if args.data_dir else None,
+        force=args.force,
     )
     if ret != 0:
         print("Prometheus import FAILED")
