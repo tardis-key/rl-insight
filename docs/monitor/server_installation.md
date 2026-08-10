@@ -177,6 +177,89 @@ server:
   data_dir: /path/to/rl-insight/data
 ```
 
+---
+
+## Data Migration
+
+RL-Insight can export and import monitoring data (Prometheus metrics and Tempo traces)
+filtered by ``project`` and ``experiment_name``. This is useful for:
+
+* Moving experiments between RL-Insight instances.
+* Archiving completed experiment data before cleanup.
+* Sharing specific experiment results with collaborators.
+
+### Export
+
+Export Prometheus blocks and Tempo traces for a specific project and experiment:
+
+```bash
+rl-insight export \
+  --project demo-project \
+  --experiment gpu-experiment-001 \
+  --output ./my-export
+```
+
+Omit ``--project`` or ``--experiment`` (or pass ``"*"``) to match all values.
+For example, to export everything:
+
+```bash
+rl-insight export --output ./full-export
+```
+
+The command creates a directory structure:
+
+```text
+my-export/
+├── manifest.json          # project, experiment_name, timestamp
+├── prometheus/             # TSDB blocks copied via promtool
+│   └── <block-ulid>/
+└── tempo/                  # traces exported via TraceQL
+    └── traces.json
+```
+
+Options:
+
+| Option | Description |
+|---|---|
+| ``--project`` | Filter by ``project`` label. Default: ``*`` (all). |
+| ``--experiment`` | Filter by ``experiment_name`` label. Default: ``*`` (all). |
+| ``--output`` | Output directory (required). Existing content is overwritten. |
+| ``--prometheus-url`` | Prometheus API URL (default ``http://127.0.0.1:9090``). |
+| ``--tempo-url`` | Tempo query API URL (default ``http://127.0.0.1:3200``). |
+| ``--data-dir`` | Prometheus TSDB data directory. Auto-detected if not set. |
+| ``--promtool-bin`` | Path to ``promtool`` binary (default ``promtool`` from PATH). |
+
+### Import
+
+Import previously exported data into a running RL-Insight instance:
+
+```bash
+rl-insight import --input ./my-export
+```
+
+By default, importing into an instance that already contains data for the same
+``experiment_name`` will fail with an error. Use ``--force`` to skip this check:
+
+```bash
+rl-insight import --input ./my-export --force
+```
+
+Options:
+
+| Option | Description |
+|---|---|
+| ``--input`` | Directory containing exported data (required). |
+| ``--prometheus-url`` | Target Prometheus API URL (default ``http://127.0.0.1:9090``). |
+| ``--tempo-otlp-url`` | Target OTLP HTTP endpoint (default ``http://127.0.0.1:4318/v1/traces``). |
+| ``--data-dir`` | Target Prometheus TSDB directory. Auto-detected if not set. |
+| ``--force`` | Skip experiment name conflict detection and overwrite. |
+
+After importing Prometheus blocks, the target Prometheus must be restarted or
+reloaded (``POST /-/reload``) to recognize the new TSDB blocks. RL-Insight triggers
+``/-/reload`` automatically when it manages the Prometheus instance.
+
+
+
 ## Next Step
 
 Continue with [Quick Start](./quick_start.md) to start the stack, instrument training code, and open Grafana.
