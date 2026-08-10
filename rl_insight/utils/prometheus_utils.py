@@ -392,8 +392,103 @@ def prometheus_export(
     Returns:
         0 on success, non-zero on failure.
     """
+    import shutil as _shutil
+    import subprocess as _subprocess
+    import tempfile as _tempfile
+    from pathlib import Path as _Path
 
-    raise NotImplementedError
+    project = _wild_to_none(project)
+    experiment_name = _wild_to_none(experiment_name)
+
+    if output_dir is None:
+        logger.error("output_dir is required")
+        return 1
+
+    out = _Path(output_dir).expanduser().resolve()
+    out.mkdir(parents=True, exist_ok=True)
+
+    # Find promtool binary
+    _promtool = _find_promtool()
+    if _promtool is None:
+        logger.error("promtool binary not found, cannot import")
+        return 1
+
+    if data_dir is None:
+        data_dir = str(MonitorPaths.STATE_ROOT / "data" / "prometheus")
+    tsdb_path = _Path(data_dir).expanduser().resolve()
+    if not tsdb_path.exists():
+        logger.error("Prometheus data directory not found: %s", tsdb_path)
+        return 1
+
+    prom_out = out / "prometheus"
+    prom_out.mkdir(parents=True, exist_ok=True)
+
+    # No filter: copy all blocks directly
+    if project is None and experiment_name is None:
+        logger.info("No label filter specified, copying all blocks...")
+        for item in tsdb_path.iterdir():
+            if item.is_dir() and item.name not in ("chunks_head", "wal") and not item.name.startswith("tmp_dbro_sandbox"):
+                _shutil.copytree(item, prom_out / item.name, dirs_exist_ok=True)
+        logger.info("Exported Prometheus blocks to %s", prom_out)
+        return 0
+
+    # Filtered export: dump -> filter -> rebuild
+    logger.info(
+        "Filtering by project=%s experiment_name=%s, dumping TSDB...",
+        project, experiment_name,
+    )
+    with _tempfile.TemporaryDirectory() as tmpdir:
+        tmp = _Path(tmpdir)
+        dump_file = tmp / "dump.txt"
+
+        result = _subprocess.run(
+            [promtool_bin, "tsdb", "dump-openmetrics",
+             "--sandbox-dir-root=" + str(tsdb_path), tsdb_path.name],
+            cwd=str(tsdb_path.parent),
+            stdout=_subprocess.PIPE,
+            stderr=_subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode != 0:
+            logger.error("promtool dump-openmetrics failed: %s", result.stderr)
+            return 1
+
+        logger.info("Filtering %d bytes of OpenMetrics data...", len(result.stdout))
+        filtered = _filter_openmetrics(result.stdout, project, experiment_name)
+        dump_file.write_text(filtered, encoding="utf-8")
+
+        logger.info("Creating TSDB blocks from filtered data (%d bytes)...", len(filtered))
+        blocks_dir = tmp / "blocks"
+        blocks_dir.mkdir()
+
+        result = _subprocess.run(
+            [promtool_bin, "tsdb", "create-blocks-from", "openmetrics",
+             str(dump_file), str(blocks_dir)],
+            stdout=_subprocess.PIPE,
+            stderr=_subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode != 0:
+            logger.error("promtool create-blocks-from failed: %s", result.stderr)
+            return 1
+
+        for item in blocks_dir.iterdir():
+            if item.is_dir() and not item.name.startswith("tmp_dbro_sandbox"):
+                _shutil.copytree(item, prom_out / item.name, dirs_exist_ok=True)
+
+    # Write manifest
+    import json as _json
+    manifest = {
+        "project": project or "*",
+        "experiment_name": experiment_name or "*",
+        "exported_at": _datetime.datetime.now().isoformat(),
+        "source": str(tsdb_path),
+    }
+    (out / "manifest.json").write_text(_json.dumps(manifest, indent=2))
+    logger.info("Exported Prometheus blocks to %s", prom_out)
+    return 0
+
+
 def prometheus_import(
     input_dir: str,
     prometheus_url: str = "http://127.0.0.1:9090",
@@ -411,8 +506,59 @@ def prometheus_import(
     Returns:
         0 on success, non-zero on failure.
     """
+    import shutil as _shutil
+    import subprocess as _subprocess
+    import tempfile as _tempfile
+    from pathlib import Path as _Path
 
-    raise NotImplementedError
+    src = _Path(input_dir).expanduser().resolve() / "prometheus"
+    if not src.exists():
+        logger.error("Prometheus data not found in input: %s", src)
+        return 1
+
+    if data_dir is None:
+        data_dir = str(MonitorPaths.STATE_ROOT / "data" / "prometheus")
+    dst = _Path(data_dir).expanduser().resolve()
+    dst.mkdir(parents=True, exist_ok=True)
+
+    _promtool = _find_promtool()
+    if _promtool is None:
+        logger.error("promtool binary not found, cannot import")
+        return 1
+
+    blocks = [d for d in src.iterdir() if d.is_dir() and not d.name.startswith("tmp_dbro_sandbox")]
+    if not blocks:
+        logger.error("No TSDB blocks found in %s", src)
+        return 1
+
+    # TODO: experiment_name conflict detection
+
+    logger.info("Importing %d block(s) into %s", len(blocks), dst)
+    for block in blocks:
+        dest_block = dst / block.name
+        if dest_block.exists():
+            logger.warning("Block %s already exists, skipping", block.name)
+            continue
+        _shutil.copytree(block, dest_block)
+
+    # Reload Prometheus
+    reload_url = prometheus_url.rstrip("/") + "/-/reload"
+    try:
+        import requests as _requests
+        with _requests.Session() as session:
+            session.trust_env = False
+            resp = session.post(reload_url, timeout=10)
+            resp.raise_for_status()
+        logger.info("Prometheus reloaded successfully")
+    except Exception as e:
+        logger.warning(
+            "Failed to reload Prometheus: %s (blocks in place, may need manual restart)", e
+        )
+
+    return 0
+
+
+
 def _wild_to_none(value: str | None) -> str | None:
     """Treat None and "*" as no filter."""
     if value is None or value.strip() == "*":
@@ -463,22 +609,6 @@ def _extract_labels(line: str) -> str | None:
     return None
 
 
-def _get_existing_experiments(prometheus_url: str) -> set[str]:
-    """Query Prometheus for existing experiment_name label values."""
-    import requests as _requests
-    try:
-        url = prometheus_url.rstrip("/") + "/api/v1/label/experiment_name/values"
-        resp = _requests.get(url, timeout=5)
-        resp.raise_for_status()
-        return set(resp.json().get("data", []))
-    except Exception:
-        logger.warning("Could not query existing experiment_names, assuming no conflicts")
-        return set()
-
-
-
-
-
 def _find_promtool() -> str | None:
     """Find promtool binary in common locations."""
     import shutil as _shutil
@@ -496,15 +626,3 @@ def _find_promtool() -> str | None:
                     return str(p)
     return None
 
-
-def _read_manifest_experiment(input_parent) -> str | None:
-    """Read experiment_name from manifest.json in the input directory."""
-    import json as _json
-    manifest_file = input_parent / "manifest.json"
-    if manifest_file.exists():
-        try:
-            manifest = _json.loads(manifest_file.read_text())
-            return manifest.get("experiment_name")
-        except Exception:
-            pass
-    return None
