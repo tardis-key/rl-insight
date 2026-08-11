@@ -166,13 +166,15 @@ def tempo_export(
     # Fetch full trace JSON for each trace ID
     all_batches: list[dict] = []
     trace_url_base = f"{tempo_url.rstrip('/')}/api/traces/"
-    for tid in all_trace_ids:
+    import tqdm as _tqdm
+    for tid in _tqdm.tqdm(all_trace_ids, desc="  Exporting traces", unit="trace"):
         try:
             resp = requests.get(f"{trace_url_base}{tid}", timeout=30)
             resp.raise_for_status()
             trace_data = resp.json()
             batches = trace_data.get("batches", [])
             all_batches.extend(batches)
+
         except requests.RequestException as exc:
             logger.warning("Failed to fetch trace %s: %s", tid, exc)
             continue
@@ -229,6 +231,22 @@ def tempo_import(
     if not batches:
         logger.warning("No trace batches in %s; nothing to import", traces_file)
         return 0
+
+    # Pre-flight: verify OTLP endpoint is reachable
+    import socket as _socket
+    from urllib.parse import urlparse as _urlparse
+    _parsed = _urlparse(otlp_url)
+    _sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    _sock.settimeout(5)
+    try:
+        _sock.connect((_parsed.hostname or "127.0.0.1", _parsed.port or 4318))
+        _sock.close()
+    except OSError:
+        _sock.close()
+        logger.error(
+            "Cannot reach OTLP endpoint %s. Is the RL-Insight server (and Tempo) running?", otlp_url
+        )
+        return 1
 
     # Decode base64 traceId/spanId to hex for OTLP
     _decode_b64_ids(batches)
@@ -288,7 +306,14 @@ def tempo_import(
         5: SpanKind.CONSUMER,
     }
 
+    # Count total spans for progress
+    _total_spans = 0
+    for batch in batches:
+        for ss in batch.get("scopeSpans", []):
+            _total_spans += len(ss.get("spans", []))
     imported = 0
+    import tqdm as _tqdm
+    _pbar = _tqdm.tqdm(total=_total_spans, desc="  Importing spans", unit="span")
     for batch in batches:
         for ss in batch.get("scopeSpans", []):
             for span_data in ss.get("spans", []):
@@ -320,7 +345,10 @@ def tempo_import(
                 )
                 span.end(end_time=new_end)
                 imported += 1
+                if imported % 10 == 0 or imported == _total_spans:
+                    _pbar.update(10 if imported % 10 == 0 and imported < _total_spans else _total_spans - _pbar.n)
 
+    _pbar.close()
     provider.force_flush()
     logger.info("Imported %d span(s) via OTLP (protobuf)", imported)
     return 0

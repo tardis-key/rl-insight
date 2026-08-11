@@ -427,9 +427,12 @@ def prometheus_export(
     # No filter: copy all blocks directly
     if project is None and experiment_name is None:
         logger.info("No label filter specified, copying all blocks...")
-        for item in tsdb_path.iterdir():
-            if item.is_dir() and item.name not in ("chunks_head", "wal", "snapshots") and not item.name.startswith("tmp_dbro_sandbox"):
-                _shutil.copytree(item, prom_out / item.name, dirs_exist_ok=True)
+        _copy_items = [item for item in tsdb_path.iterdir()
+                       if item.is_dir() and item.name not in ("chunks_head", "wal", "snapshots")
+                       and not item.name.startswith("tmp_dbro_sandbox")]
+        import tqdm as _tqdm
+        for item in _tqdm.tqdm(_copy_items, desc="  Copying blocks", unit="block"):
+            _shutil.copytree(item, prom_out / item.name, dirs_exist_ok=True)
         logger.info("Exported Prometheus blocks to %s", prom_out)
 
         # Write manifest
@@ -483,9 +486,11 @@ def prometheus_export(
             logger.error("promtool create-blocks-from failed: %s", result.stderr)
             return 1
 
-        for item in blocks_dir.iterdir():
-            if item.is_dir() and not item.name.startswith("tmp_dbro_sandbox"):
-                _shutil.copytree(item, prom_out / item.name, dirs_exist_ok=True)
+        _filtered_items = [item for item in blocks_dir.iterdir()
+                          if item.is_dir() and not item.name.startswith("tmp_dbro_sandbox")]
+        import tqdm as _tqdm
+        for item in _tqdm.tqdm(_filtered_items, desc="  Copying blocks", unit="block"):
+            _shutil.copytree(item, prom_out / item.name, dirs_exist_ok=True)
 
     # Write manifest
     import json as _json
@@ -555,12 +560,17 @@ def prometheus_import(
             )
             return 1
 
-    logger.info("Importing %d block(s) into %s", len(blocks), dst)
-    for block in blocks:
+    _total_blocks = len(blocks)
+    logger.info("Importing %d block(s) into %s", _total_blocks, dst)
+    import tqdm as _tqdm
+    for block in _tqdm.tqdm(blocks, desc="  Importing blocks", unit="block"):
         dest_block = dst / block.name
         if dest_block.exists():
-            logger.warning("Block %s already exists, skipping", block.name)
-            continue
+            if not force:
+                logger.warning("Block %s already exists, skipping", block.name)
+                continue
+            logger.info("Block %s already exists, replacing (--force)", block.name)
+            _shutil.rmtree(dest_block)
         _shutil.copytree(block, dest_block)
 
     # Reload Prometheus

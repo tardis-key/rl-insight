@@ -18,6 +18,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import warnings
+
+warnings.filterwarnings("ignore", message=".*doesn.t match a supported version.*")
 from pathlib import Path
 from typing import Sequence
 
@@ -40,7 +43,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="rl-insight")
     parser.add_argument(
         "--log-level",
-        default="INFO",
+        default="WARNING",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Python logging level.",
     )
@@ -232,11 +235,8 @@ def _handle_export(args: argparse.Namespace) -> int:
     project = args.project or "*"
     experiment = args.experiment or "*"
 
-    print(f"Exporting project={project}, experiment={experiment}")
-    print()
 
     # Prometheus export
-    print("--- Prometheus Export ---")
     ret = _prom_export(
         project=project,
         experiment_name=experiment,
@@ -250,8 +250,7 @@ def _handle_export(args: argparse.Namespace) -> int:
         return ret
 
     # Tempo export (non-fatal if unavailable)
-    print()
-    print("--- Tempo Export ---")
+
     ret = _tempo_export(
         project=project,
         experiment_name=experiment,
@@ -260,9 +259,6 @@ def _handle_export(args: argparse.Namespace) -> int:
     )
     if ret != 0:
         print("Tempo export failed (non-fatal, Prometheus data exported successfully)")
-
-    print()
-    print(f"Export complete: {args.output}")
     return 0
 
 
@@ -271,11 +267,8 @@ def _handle_import(args: argparse.Namespace) -> int:
     from .utils.prometheus_utils import prometheus_import as _prom_import
     from .utils.opentelemetry_utils import tempo_import as _tempo_import
 
-    print(f"Importing from {args.input}")
-    print()
 
     # Prometheus import
-    print("--- Prometheus Import ---")
     ret = _prom_import(
         input_dir=str(args.input),
         prometheus_url=args.prometheus_url,
@@ -287,17 +280,13 @@ def _handle_import(args: argparse.Namespace) -> int:
         return ret
 
     # Tempo import (non-fatal if unavailable or traces missing)
-    print()
-    print("--- Tempo Import ---")
+
     ret = _tempo_import(
         input_dir=str(args.input),
         otlp_url=args.tempo_otlp_url,
     )
     if ret != 0:
         print("Tempo import failed (non-fatal, Prometheus data imported successfully)")
-
-    print()
-    print(f"Import complete from {args.input}")
     return 0
 
 
