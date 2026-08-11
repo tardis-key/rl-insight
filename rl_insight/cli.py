@@ -18,13 +18,14 @@ from __future__ import annotations
 
 import argparse
 import logging
-import warnings
-
-warnings.filterwarnings("ignore", message=".*doesn.t match a supported version.*")
 from pathlib import Path
 from typing import Sequence
 
 from .server.commands import ServerCommands
+
+import warnings
+
+warnings.filterwarnings("ignore", message=".*doesn.t match a supported version.*")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -140,7 +141,6 @@ def _add_common_config_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-
 def _add_data_parser(subparsers: argparse._SubParsersAction) -> None:
     """Attach ``export`` and ``import`` subcommands for data migration."""
     export_parser = subparsers.add_parser(
@@ -235,7 +235,6 @@ def _handle_export(args: argparse.Namespace) -> int:
     project = args.project or "*"
     experiment = args.experiment or "*"
 
-
     # Prometheus export
     ret = _prom_export(
         project=project,
@@ -266,7 +265,6 @@ def _handle_import(args: argparse.Namespace) -> int:
     """Run data import for Prometheus and Tempo."""
     from .utils.prometheus_utils import prometheus_import as _prom_import
     from .utils.opentelemetry_utils import tempo_import as _tempo_import
-
 
     # Prometheus import
     ret = _prom_import(

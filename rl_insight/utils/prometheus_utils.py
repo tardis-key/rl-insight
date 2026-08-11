@@ -25,9 +25,6 @@ from pathlib import Path
 from typing import Any
 
 import requests
-import shutil
-import subprocess
-import tempfile
 import yaml
 from omegaconf import DictConfig, OmegaConf
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
@@ -396,14 +393,13 @@ def prometheus_export(
     import subprocess as _subprocess
     import tempfile as _tempfile
     import datetime as _datetime
-    import time as _time
     from pathlib import Path as _Path
 
     project = _wild_to_none(project)
     experiment_name = _wild_to_none(experiment_name)
 
     if output_dir is None:
-        logger.error("output_dir is required")
+        logger.error("[rl-insight] output_dir is required")
         return 1
 
     out = _Path(output_dir).expanduser().resolve()
@@ -433,6 +429,7 @@ def prometheus_export(
         _match_str = "{" + ",".join(_match_labels) + "}"
         try:
             import requests as _requests
+
             _series_resp = _requests.get(
                 _series_url,
                 params={"match[]": _match_str},
@@ -442,13 +439,16 @@ def prometheus_export(
             _series_data = _series_resp.json()
             if _series_data.get("status") != "success" or not _series_data.get("data"):
                 logger.error(
-                    "No metrics found for project=%s experiment_name=%s. "
+                    "[rl-insight] No metrics found for project=%s experiment_name=%s. "
                     "Check that the project/experiment exists and has metric data.",
-                    project or "*", experiment_name or "*",
+                    project or "*",
+                    experiment_name or "*",
                 )
                 return 1
         except Exception as exc:
-            logger.error("Pre-flight Prometheus series check failed: %s", exc)
+            logger.error(
+                "[rl-insight] Pre-flight Prometheus series check failed: %s", exc
+            )
             return 1
 
     prom_out = out / "prometheus"
@@ -457,16 +457,22 @@ def prometheus_export(
     # No filter: copy all blocks directly
     if project is None and experiment_name is None:
         logger.info("No label filter specified, copying all blocks...")
-        _copy_items = [item for item in tsdb_path.iterdir()
-                       if item.is_dir() and item.name not in ("chunks_head", "wal", "snapshots")
-                       and not item.name.startswith("tmp_dbro_sandbox")]
+        _copy_items = [
+            item
+            for item in tsdb_path.iterdir()
+            if item.is_dir()
+            and item.name not in ("chunks_head", "wal", "snapshots")
+            and not item.name.startswith("tmp_dbro_sandbox")
+        ]
         import tqdm as _tqdm
+
         for item in _tqdm.tqdm(_copy_items, desc="  Copying blocks", unit="block"):
             _shutil.copytree(item, prom_out / item.name, dirs_exist_ok=True)
         logger.info("Exported Prometheus blocks to %s", prom_out)
 
         # Write manifest
         import json as _json
+
         manifest = {
             "project": project or "*",
             "experiment_name": experiment_name or "*",
@@ -479,15 +485,21 @@ def prometheus_export(
     # Filtered export: dump -> filter -> rebuild
     logger.info(
         "Filtering by project=%s experiment_name=%s, dumping TSDB...",
-        project, experiment_name,
+        project,
+        experiment_name,
     )
     with _tempfile.TemporaryDirectory() as tmpdir:
         tmp = _Path(tmpdir)
         dump_file = tmp / "dump.txt"
 
         result = _subprocess.run(
-            [promtool_bin, "tsdb", "dump-openmetrics",
-             "--sandbox-dir-root=" + str(tsdb_path), tsdb_path.name],
+            [
+                promtool_bin,
+                "tsdb",
+                "dump-openmetrics",
+                "--sandbox-dir-root=" + str(tsdb_path),
+                tsdb_path.name,
+            ],
             cwd=str(tsdb_path.parent),
             stdout=_subprocess.PIPE,
             stderr=_subprocess.PIPE,
@@ -501,13 +513,21 @@ def prometheus_export(
         filtered = _filter_openmetrics(result.stdout, project, experiment_name)
         dump_file.write_text(filtered, encoding="utf-8")
 
-        logger.info("Creating TSDB blocks from filtered data (%d bytes)...", len(filtered))
+        logger.info(
+            "Creating TSDB blocks from filtered data (%d bytes)...", len(filtered)
+        )
         blocks_dir = tmp / "blocks"
         blocks_dir.mkdir()
 
         result = _subprocess.run(
-            [promtool_bin, "tsdb", "create-blocks-from", "openmetrics",
-             str(dump_file), str(blocks_dir)],
+            [
+                promtool_bin,
+                "tsdb",
+                "create-blocks-from",
+                "openmetrics",
+                str(dump_file),
+                str(blocks_dir),
+            ],
             stdout=_subprocess.PIPE,
             stderr=_subprocess.PIPE,
             text=True,
@@ -516,14 +536,19 @@ def prometheus_export(
             logger.error("promtool create-blocks-from failed: %s", result.stderr)
             return 1
 
-        _filtered_items = [item for item in blocks_dir.iterdir()
-                          if item.is_dir() and not item.name.startswith("tmp_dbro_sandbox")]
+        _filtered_items = [
+            item
+            for item in blocks_dir.iterdir()
+            if item.is_dir() and not item.name.startswith("tmp_dbro_sandbox")
+        ]
         import tqdm as _tqdm
+
         for item in _tqdm.tqdm(_filtered_items, desc="  Copying blocks", unit="block"):
             _shutil.copytree(item, prom_out / item.name, dirs_exist_ok=True)
 
     # Write manifest
     import json as _json
+
     manifest = {
         "project": project or "*",
         "experiment_name": experiment_name or "*",
@@ -554,13 +579,11 @@ def prometheus_import(
         0 on success, non-zero on failure.
     """
     import shutil as _shutil
-    import subprocess as _subprocess
-    import tempfile as _tempfile
     from pathlib import Path as _Path
 
     src = _Path(input_dir).expanduser().resolve() / "prometheus"
     if not src.exists():
-        logger.error("Prometheus data not found in input: %s", src)
+        logger.error("[rl-insight] Prometheus data not found in input: %s", src)
         return 1
 
     if data_dir is None:
@@ -573,9 +596,13 @@ def prometheus_import(
         logger.error("promtool binary not found, cannot import")
         return 1
 
-    blocks = [d for d in src.iterdir() if d.is_dir() and not d.name.startswith("tmp_dbro_sandbox")]
+    blocks = [
+        d
+        for d in src.iterdir()
+        if d.is_dir() and not d.name.startswith("tmp_dbro_sandbox")
+    ]
     if not blocks:
-        logger.error("No TSDB blocks found in %s", src)
+        logger.error("[rl-insight] No TSDB blocks found in %s", src)
         return 1
 
     # Detect experiment_name conflicts via manifest
@@ -584,7 +611,7 @@ def prometheus_import(
         existing = _get_existing_experiments(prometheus_url)
         if experiment_name in existing:
             logger.error(
-                "experiment_name %r already exists in target Prometheus. "
+                "[rl-insight] experiment_name %r already exists in target Prometheus. "
                 "Use --force to overwrite.",
                 experiment_name,
             )
@@ -593,11 +620,14 @@ def prometheus_import(
     _total_blocks = len(blocks)
     logger.info("Importing %d block(s) into %s", _total_blocks, dst)
     import tqdm as _tqdm
+
     for block in _tqdm.tqdm(blocks, desc="  Importing blocks", unit="block"):
         dest_block = dst / block.name
         if dest_block.exists():
             if not force:
-                logger.warning("Block %s already exists, skipping", block.name)
+                logger.warning(
+                    "[rl-insight] Block %s already exists, skipping", block.name
+                )
                 continue
             logger.info("Block %s already exists, replacing (--force)", block.name)
             _shutil.rmtree(dest_block)
@@ -607,6 +637,7 @@ def prometheus_import(
     reload_url = prometheus_url.rstrip("/") + "/-/reload"
     try:
         import requests as _requests
+
         with _requests.Session() as session:
             session.trust_env = False
             resp = session.post(reload_url, timeout=10)
@@ -614,11 +645,11 @@ def prometheus_import(
         logger.info("Prometheus reloaded successfully")
     except Exception as e:
         logger.warning(
-            "Failed to reload Prometheus: %s (blocks in place, may need manual restart)", e
+            "[rl-insight] Failed to reload Prometheus: %s (blocks in place, may need manual restart)",
+            e,
         )
 
     return 0
-
 
 
 def _wild_to_none(value: str | None) -> str | None:
@@ -628,7 +659,9 @@ def _wild_to_none(value: str | None) -> str | None:
     return value.strip()
 
 
-def _filter_openmetrics(text: str, project: str | None, experiment_name: str | None) -> str:
+def _filter_openmetrics(
+    text: str, project: str | None, experiment_name: str | None
+) -> str:
     """Filter OpenMetrics text, keeping only series matching the given labels."""
     lines = text.splitlines()
     result: list[str] = []
@@ -653,7 +686,10 @@ def _filter_openmetrics(text: str, project: str | None, experiment_name: str | N
         match = True
         if project is not None and f'project="{project}"' not in label_part:
             match = False
-        if experiment_name is not None and f'experiment_name="{experiment_name}"' not in label_part:
+        if (
+            experiment_name is not None
+            and f'experiment_name="{experiment_name}"' not in label_part
+        ):
             match = False
 
         if match:
@@ -667,30 +703,31 @@ def _extract_labels(line: str) -> str | None:
     start = line.find("{")
     end = line.find("}")
     if start >= 0 and end > start:
-        return line[start:end + 1]
+        return line[start : end + 1]
     return None
 
 
 def _get_existing_experiments(prometheus_url: str) -> set[str]:
     """Query Prometheus for existing experiment_name label values."""
     import requests as _requests
+
     try:
         url = prometheus_url.rstrip("/") + "/api/v1/label/experiment_name/values"
         resp = _requests.get(url, timeout=5)
         resp.raise_for_status()
         return set(resp.json().get("data", []))
     except Exception:
-        logger.warning("Could not query existing experiment_names, assuming no conflicts")
+        logger.warning(
+            "Could not query existing experiment_names, assuming no conflicts"
+        )
         return set()
-
-
-
 
 
 def _find_promtool() -> str | None:
     """Find promtool binary in common locations."""
     import shutil as _shutil
     from pathlib import Path as _Path
+
     # Check PATH
     found = _shutil.which("promtool")
     if found:
@@ -708,6 +745,7 @@ def _find_promtool() -> str | None:
 def _read_manifest_experiment(input_parent) -> str | None:
     """Read experiment_name from manifest.json in the input directory."""
     import json as _json
+
     manifest_file = input_parent / "manifest.json"
     if manifest_file.exists():
         try:

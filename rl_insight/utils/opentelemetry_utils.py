@@ -110,7 +110,7 @@ def tempo_export(
     import requests
 
     if output_dir is None:
-        logger.error("output_dir is required for tempo_export")
+        logger.error("[rl-insight] output_dir is required for tempo_export")
         return 1
 
     # Build TraceQL query
@@ -150,13 +150,14 @@ def tempo_export(
             _check_traces = _check_resp.json().get("traces", [])
             if not _check_traces:
                 logger.error(
-                    "No traces found for project=%s experiment_name=%s. "
+                    "[rl-insight] No traces found for project=%s experiment_name=%s. "
                     "Check that the project/experiment exists and has trace data.",
-                    effective_project or "*", effective_experiment or "*",
+                    effective_project or "*",
+                    effective_experiment or "*",
                 )
                 return 1
         except requests.RequestException as exc:
-            logger.error("Pre-flight search failed: %s", exc)
+            logger.error("[rl-insight] Pre-flight search failed: %s", exc)
             return 1
 
     out = Path(output_dir)
@@ -175,7 +176,8 @@ def tempo_export(
             params={
                 "q": query,
                 "limit": 10000,
-                "start": int(_time.time()) - 7 * 86400,  # 7 days (Tempo max search range)
+                "start": int(_time.time())
+                - 7 * 86400,  # 7 days (Tempo max search range)
                 "end": int(_time.time()),
             },
             timeout=30,
@@ -195,6 +197,7 @@ def tempo_export(
     all_batches: list[dict] = []
     trace_url_base = f"{tempo_url.rstrip('/')}/api/traces/"
     import tqdm as _tqdm
+
     for tid in _tqdm.tqdm(all_trace_ids, desc="  Exporting traces", unit="trace"):
         try:
             resp = requests.get(f"{trace_url_base}{tid}", timeout=30)
@@ -263,6 +266,7 @@ def tempo_import(
     # Pre-flight: verify OTLP endpoint is reachable
     import socket as _socket
     from urllib.parse import urlparse as _urlparse
+
     _parsed = _urlparse(otlp_url)
     _sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
     _sock.settimeout(5)
@@ -272,7 +276,8 @@ def tempo_import(
     except OSError:
         _sock.close()
         logger.error(
-            "Cannot reach OTLP endpoint %s. Is the RL-Insight server (and Tempo) running?", otlp_url
+            "[rl-insight] Cannot reach OTLP endpoint %s. Is the RL-Insight server (and Tempo) running?",
+            otlp_url,
         )
         return 1
 
@@ -299,8 +304,10 @@ def tempo_import(
     target_range = target_max - target_min
     logger.info(
         "Remapping timestamps: orig [%d, %d] -> target [%d, %d]",
-        int(min_ts // 1e9), int(max_ts // 1e9),
-        int(target_min // 1e9), int(target_max // 1e9),
+        int(min_ts // 1e9),
+        int(max_ts // 1e9),
+        int(target_min // 1e9),
+        int(target_max // 1e9),
     )
 
     # Use OpenTelemetry SDK for protobuf serialization (same as normal trace reporting)
@@ -313,11 +320,13 @@ def tempo_import(
     resource = Resource.create({"service.name": "rl_insight_monitor"})
     provider = TracerProvider(resource=resource)
     exporter = OTLPSpanExporter(endpoint=otlp_url)
-    provider.add_span_processor(BatchSpanProcessor(
-        exporter,
-        schedule_delay_millis=500,
-        max_export_batch_size=200,
-    ))
+    provider.add_span_processor(
+        BatchSpanProcessor(
+            exporter,
+            schedule_delay_millis=500,
+            max_export_batch_size=200,
+        )
+    )
     tracer = provider.get_tracer(__name__)
 
     kind_map = {
@@ -341,6 +350,7 @@ def tempo_import(
             _total_spans += len(ss.get("spans", []))
     imported = 0
     import tqdm as _tqdm
+
     _pbar = _tqdm.tqdm(total=_total_spans, desc="  Importing spans", unit="span")
     for batch in batches:
         for ss in batch.get("scopeSpans", []):
@@ -348,8 +358,12 @@ def tempo_import(
                 # Remap timestamps to recent window
                 orig_start = int(span_data["startTimeUnixNano"])
                 orig_end = int(span_data["endTimeUnixNano"])
-                new_start = int(target_min + (orig_start - min_ts) * target_range / orig_range)
-                new_end = int(target_min + (orig_end - min_ts) * target_range / orig_range)
+                new_start = int(
+                    target_min + (orig_start - min_ts) * target_range / orig_range
+                )
+                new_end = int(
+                    target_min + (orig_end - min_ts) * target_range / orig_range
+                )
                 if new_end <= new_start:
                     new_end = new_start + 1000000  # 1ms minimum
 
@@ -374,7 +388,11 @@ def tempo_import(
                 span.end(end_time=new_end)
                 imported += 1
                 if imported % 10 == 0 or imported == _total_spans:
-                    _pbar.update(10 if imported % 10 == 0 and imported < _total_spans else _total_spans - _pbar.n)
+                    _pbar.update(
+                        10
+                        if imported % 10 == 0 and imported < _total_spans
+                        else _total_spans - _pbar.n
+                    )
 
     _pbar.close()
     provider.force_flush()
