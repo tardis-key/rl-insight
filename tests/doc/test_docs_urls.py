@@ -34,9 +34,11 @@ import requests
 CURRENT_FILE = Path(__file__).resolve()
 PROJECT_ROOT = CURRENT_FILE.parents[2]
 DOCS_FOLDER = PROJECT_ROOT / "docs"
-URL_PATTERN = re.compile(r"https?://[^\s)+\"'>]+")
+URL_PATTERN = re.compile(r"https?://[^\s)+\"'>`]+")
 TIMEOUT = 5  # request timeout
 TEMPLATE_MARKERS = ("<", "${", "{")
+BARE_ENDPOINT_RE = re.compile(r"^https?://[^/]+(:\d+)?/?$")
+LOCALHOST_RE = re.compile(r"^https?://(127\.0\.0\.1|localhost)(:\d+)?")
 TEXT_SUFFIXES = {".md", ".rst", ".txt", ".py"}
 
 
@@ -95,6 +97,19 @@ def is_template_url(url: str) -> bool:
     return any(marker in url for marker in TEMPLATE_MARKERS)
 
 
+def is_bare_endpoint_url(url: str) -> bool:
+    """Return True if *url* is just host:port with no path (e.g. http://127.0.0.1:9090).
+
+    These are service endpoint references that can't be validated from CI.
+    """
+    return bool(BARE_ENDPOINT_RE.match(url))
+
+
+def is_localhost_url(url: str) -> bool:
+    """Return True if *url* points to localhost or 127.0.0.1 (any path)."""
+    return bool(LOCALHOST_RE.match(url))
+
+
 def test_docs_folder_all_urls_are_valid():
     """
     Test that all URLs inside docs directory files are valid and reachable.
@@ -106,6 +121,10 @@ def test_docs_folder_all_urls_are_valid():
         urls = extract_urls_from_file(file)
         for url in urls:
             if is_template_url(url):
+                continue
+            if is_bare_endpoint_url(url):
+                continue
+            if is_localhost_url(url):
                 continue
             if not is_url_valid(url):
                 invalid_links.append(f"{file} -> {url}")

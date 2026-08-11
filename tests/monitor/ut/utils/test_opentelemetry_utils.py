@@ -16,9 +16,12 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from unittest.mock import MagicMock
 
 import pytest
+import requests as _requests
 from opentelemetry.sdk.resources import SERVICE_NAME
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -66,14 +69,12 @@ def test_record_span_should_export_timing_attributes_and_resource_when_enabled(
 
 # --- tempo_export / tempo_import unit tests ---
 
-import base64
-import json
-import requests as _requests
-
 
 class TestTempoExport:
     def test_should_build_traceql_and_fetch_traces_when_project_and_experiment_set(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path,
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path,
     ) -> None:
         """Export with both filters produces correct TraceQL and output file."""
         mock_get = MagicMock()
@@ -85,29 +86,41 @@ class TestTempoExport:
         # Second call: trace by ID returns batches
         trace_resp = MagicMock()
         trace_resp.json.return_value = {
-            "batches": [{
-                "resource": {"attributes": []},
-                "scopeSpans": [{
-                    "scope": {"name": "test"},
-                    "spans": [{
-                        "traceId": "AADwKw==",
-                        "spanId": "AAEAAA==",
-                        "name": "rollout",
-                    }],
-                }],
-            }]
+            "batches": [
+                {
+                    "resource": {"attributes": []},
+                    "scopeSpans": [
+                        {
+                            "scope": {"name": "test"},
+                            "spans": [
+                                {
+                                    "traceId": "AADwKw==",
+                                    "spanId": "AAEAAA==",
+                                    "name": "rollout",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
         }
-        mock_get.side_effect = [search_resp, trace_resp]
+        preflight_resp = MagicMock()
+        preflight_resp.json.return_value = {
+            "traces": [{"traceID": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"}]
+        }
+        mock_get.side_effect = [preflight_resp, search_resp, trace_resp]
         monkeypatch.setattr(_requests, "get", mock_get)
 
         out = tmp_path / "export-out"
         ret = otel_module.tempo_export(
-            project="demo", experiment_name="exp1", output_dir=str(out),
+            project="demo",
+            experiment_name="exp1",
+            output_dir=str(out),
         )
 
         assert ret == 0
         # Verify correct TraceQL query
-        search_call = mock_get.call_args_list[0]
+        search_call = mock_get.call_args_list[1]
         assert search_call[1]["params"]["q"] == (
             '{ span.project = "demo" && span.experiment_name = "exp1" }'
         )
@@ -118,7 +131,9 @@ class TestTempoExport:
         assert len(data["batches"]) == 1
         assert data["batches"][0]["scopeSpans"][0]["spans"][0]["name"] == "rollout"
 
-    def test_should_emit_wildcard_query_when_filters_are_none(self, monkeypatch, tmp_path) -> None:
+    def test_should_emit_wildcard_query_when_filters_are_none(
+        self, monkeypatch, tmp_path
+    ) -> None:
         """None or '*' project/experiment produce a query without those filters."""
         mock_get = MagicMock()
         search_resp = MagicMock()
@@ -128,7 +143,9 @@ class TestTempoExport:
 
         out = tmp_path / "export-wildcard"
         ret = otel_module.tempo_export(
-            project="*", experiment_name="*", output_dir=str(out),
+            project="*",
+            experiment_name="*",
+            output_dir=str(out),
         )
 
         assert ret == 0
@@ -137,7 +154,6 @@ class TestTempoExport:
 
     def test_should_return_error_when_search_fails(self, monkeypatch, tmp_path) -> None:
         """A 500 from the search API should return non-zero."""
-        
 
         mock_get = MagicMock()
         mock_get.side_effect = _requests.RequestException("boom")
@@ -145,7 +161,9 @@ class TestTempoExport:
 
         out = tmp_path / "export-fail"
         ret = otel_module.tempo_export(
-            project="p", experiment_name="e", output_dir=str(out),
+            project="p",
+            experiment_name="e",
+            output_dir=str(out),
         )
 
         assert ret == 1
@@ -158,30 +176,54 @@ class TestTempoExport:
 
 class TestTempoImport:
     def test_should_post_resource_spans_to_otlp_when_traces_file_is_valid(
-        self, monkeypatch, tmp_path,
+        self,
+        monkeypatch,
+        tmp_path,
     ) -> None:
-        """Valid traces.json is converted and POSTed to the OTLP endpoint."""
+        """Valid traces.json with timestamps is imported via OTel SDK."""
+        import socket as _socket_module
+
         traces_dir = tmp_path / "tempo"
         traces_dir.mkdir()
-        traces_dir.joinpath("traces.json").write_text(json.dumps({
-            "batches": [{
-                "resource": {"attributes": []},
-                "scopeSpans": [{
-                    "scope": {"name": "test"},
-                    "spans": [{
-                        "traceId": base64.b64encode(bytes.fromhex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6")).decode(),
-                        "spanId": base64.b64encode(bytes.fromhex("1f2e3d4c5b6a7980")).decode(),
-                        "name": "step",
-                    }],
-                }],
-            }]
-        }))
+        traces_dir.joinpath("traces.json").write_text(
+            json.dumps(
+                {
+                    "batches": [
+                        {
+                            "resource": {"attributes": []},
+                            "scopeSpans": [
+                                {
+                                    "scope": {"name": "test"},
+                                    "spans": [
+                                        {
+                                            "traceId": base64.b64encode(
+                                                bytes.fromhex(
+                                                    "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+                                                )
+                                            ).decode(),
+                                            "spanId": base64.b64encode(
+                                                bytes.fromhex("1f2e3d4c5b6a7980")
+                                            ).decode(),
+                                            "name": "step",
+                                            "startTimeUnixNano": "1000000000",
+                                            "endTimeUnixNano": "2000000000",
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+        )
 
-        mock_post = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_post.return_value = mock_resp
-        monkeypatch.setattr(_requests, "post", mock_post)
+        mock_sock = MagicMock()
+        monkeypatch.setattr(_socket_module, "socket", lambda *a, **kw: mock_sock)
+
+        mock_exporter = MagicMock()
+        monkeypatch.setattr(
+            otel_module, "OTLPSpanExporter", lambda endpoint: mock_exporter
+        )
 
         ret = otel_module.tempo_import(
             input_dir=str(tmp_path),
@@ -189,76 +231,94 @@ class TestTempoImport:
         )
 
         assert ret == 0
-        mock_post.assert_called_once()
-        call_args, call_kwargs = mock_post.call_args
-        payload = call_kwargs["json"]
-        assert "resourceSpans" in payload
-        span = payload["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
-        # IDs should be converted from base64 to hex
-        assert span["traceId"] == "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
-        assert span["spanId"] == "1f2e3d4c5b6a7980"
 
     def test_should_return_error_when_traces_file_missing(self, tmp_path) -> None:
         """Missing traces.json should return non-zero."""
         ret = otel_module.tempo_import(input_dir=str(tmp_path))
         assert ret == 1
 
-    def test_should_return_error_when_otlp_endpoint_rejects(self, monkeypatch, tmp_path) -> None:
-        """A 400 from the OTLP endpoint should return non-zero."""
+    def test_should_return_error_when_otlp_endpoint_unreachable(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        """TCP pre-flight failure (port closed) should return non-zero."""
+        import socket as _socket_module
+
         traces_dir = tmp_path / "tempo"
         traces_dir.mkdir()
-        traces_dir.joinpath("traces.json").write_text(json.dumps({
-            "batches": [{
-                "resource": {"attributes": []},
-                "scopeSpans": [{
-                    "scope": {"name": "test"},
-                    "spans": [{
-                        "traceId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
-                        "spanId": "1f2e3d4c5b6a7980",
-                        "name": "step",
-                    }],
-                }],
-            }]
-        }))
+        traces_dir.joinpath("traces.json").write_text(
+            json.dumps(
+                {
+                    "batches": [
+                        {
+                            "resource": {"attributes": []},
+                            "scopeSpans": [
+                                {
+                                    "scope": {"name": "test"},
+                                    "spans": [
+                                        {
+                                            "traceId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+                                            "spanId": "1f2e3d4c5b6a7980",
+                                            "name": "step",
+                                            "startTimeUnixNano": "1000000000",
+                                            "endTimeUnixNano": "2000000000",
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+        )
 
-        mock_post = MagicMock()
-        bad_resp = MagicMock()
-        bad_resp.status_code = 400
-        bad_resp.text = "bad request"
-        mock_post.return_value = bad_resp
-        monkeypatch.setattr(_requests, "post", mock_post)
+        mock_sock = MagicMock()
+        mock_sock.connect.side_effect = OSError("Connection refused")
+        monkeypatch.setattr(_socket_module, "socket", lambda *a, **kw: mock_sock)
 
         ret = otel_module.tempo_import(input_dir=str(tmp_path))
         assert ret == 1
 
-    def test_should_not_alter_already_hex_ids_during_import(self, monkeypatch, tmp_path) -> None:
-        """Spans with already-hex IDs are left unchanged."""
+    def test_should_not_alter_already_hex_ids_during_import(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        """Spans with already-hex IDs are imported without modification."""
+        import socket as _socket_module
+
         traces_dir = tmp_path / "tempo"
         traces_dir.mkdir()
-        traces_dir.joinpath("traces.json").write_text(json.dumps({
-            "batches": [{
-                "resource": {"attributes": []},
-                "scopeSpans": [{
-                    "scope": {"name": "test"},
-                    "spans": [{
-                        "traceId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
-                        "spanId": "1f2e3d4c5b6a7980",
-                        "name": "step",
-                    }],
-                }],
-            }]
-        }))
+        traces_dir.joinpath("traces.json").write_text(
+            json.dumps(
+                {
+                    "batches": [
+                        {
+                            "resource": {"attributes": []},
+                            "scopeSpans": [
+                                {
+                                    "scope": {"name": "test"},
+                                    "spans": [
+                                        {
+                                            "traceId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+                                            "spanId": "1f2e3d4c5b6a7980",
+                                            "name": "step",
+                                            "startTimeUnixNano": "1000000000",
+                                            "endTimeUnixNano": "2000000000",
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+        )
 
-        mock_post = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_post.return_value = mock_resp
-        monkeypatch.setattr(_requests, "post", mock_post)
+        mock_sock = MagicMock()
+        monkeypatch.setattr(_socket_module, "socket", lambda *a, **kw: mock_sock)
+
+        mock_exporter = MagicMock()
+        monkeypatch.setattr(
+            otel_module, "OTLPSpanExporter", lambda endpoint: mock_exporter
+        )
 
         ret = otel_module.tempo_import(input_dir=str(tmp_path))
-
         assert ret == 0
-        payload = mock_post.call_args.kwargs["json"]
-        span = payload["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
-        assert span["traceId"] == "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
-        assert span["spanId"] == "1f2e3d4c5b6a7980"

@@ -47,7 +47,7 @@ TEMPO_URL = "http://127.0.0.1:3200"
 READY_TIMEOUT = 60
 
 # Labels used by test_monitor_stress.py (must match exactly).
-STRESS_PROJECT = "verl"
+STRESS_PROJECT = "*"
 STRESS_EXPERIMENT = "ppo-stress-test"
 
 DATA_DIR = MonitorPaths.STATE_ROOT / "data"
@@ -80,7 +80,16 @@ def _run_cli(*args: str) -> int:
         text=True,
         timeout=300,
     )
-    return result.returncode
+    return result
+
+
+def _check_cli_success(cmd: str, result: subprocess.CompletedProcess[str]) -> None:
+    """Assert CLI success, printing stderr/stdout on failure."""
+    assert result.returncode == 0, (
+        f"{cmd} returned {result.returncode}\n"
+        f"STDERR:\n{result.stderr}\n"
+        f"STDOUT:\n{result.stdout}"
+    )
 
 
 def _prometheus_labels() -> dict[str, list[str]]:
@@ -127,7 +136,7 @@ class TestDataMigration:
         _wait_for_ready(f"{SERVER_URL}/healthz")
         _wait_for_ready(f"{PROMETHEUS_URL}/-/ready")
 
-        rc = _run_cli(
+        result = _run_cli(
             "export",
             "--project",
             STRESS_PROJECT,
@@ -136,7 +145,7 @@ class TestDataMigration:
             "--output",
             str(EXPORT_DIR),
         )
-        assert rc == 0, f"export CLI returned {rc}"
+        _check_cli_success("export", result)
 
         manifest = EXPORT_DIR / "manifest.json"
         assert manifest.exists(), f"manifest.json missing from {EXPORT_DIR}"
@@ -169,8 +178,8 @@ class TestDataMigration:
 
     def test_03_import_restores_data(self) -> None:
         """Import the exported bundle and verify metrics are back."""
-        rc = _run_cli("import", "--input", str(EXPORT_DIR), "--force")
-        assert rc == 0, f"import CLI returned {rc}"
+        result = _run_cli("import", "--input", str(EXPORT_DIR), "--force")
+        _check_cli_success("import", result)
 
         requests.post(f"{PROMETHEUS_URL}/-/reload", timeout=10)
         time.sleep(3)
