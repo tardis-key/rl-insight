@@ -18,6 +18,7 @@ To collect CPU, memory, disk, network, or Ascend NPU metrics, start with
 
    Quick Start <monitor/quick_start>
    Server Installation <monitor/server_installation>
+   Data Migration <monitor/data_migration>
    Hardware Monitoring <monitor/hardware/index>
 
 .. toctree::

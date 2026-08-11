@@ -136,14 +136,15 @@ def tempo_export(
     if effective_project or effective_experiment:
         _check_url = f"{tempo_url.rstrip('/')}/api/search"
         try:
+            _params: dict[str, Any] = {
+                "q": query,
+                "limit": 1,
+                "start": int(_time.time()) - 7 * 86400,
+                "end": int(_time.time()),
+            }
             _check_resp = requests.get(
                 _check_url,
-                params={
-                    "q": query,
-                    "limit": 1,
-                    "start": int(_time.time()) - 7 * 86400,
-                    "end": int(_time.time()),
-                },
+                params=_params,
                 timeout=10,
             )
             _check_resp.raise_for_status()
@@ -169,17 +170,17 @@ def tempo_export(
     # Search for matching trace IDs with pagination
     all_trace_ids: list[str] = []
     search_url = f"{tempo_url.rstrip('/')}/api/search"
+    _search_params: dict[str, Any] = {
+        "q": query,
+        "limit": 10000,
+        "start": int(_time.time()) - 7 * 86400,
+        "end": int(_time.time()),
+    }
 
     try:
         resp = requests.get(
             search_url,
-            params={
-                "q": query,
-                "limit": 10000,
-                "start": int(_time.time())
-                - 7 * 86400,  # 7 days (Tempo max search range)
-                "end": int(_time.time()),
-            },
+            params=_search_params,
             timeout=30,
         )
         resp.raise_for_status()
