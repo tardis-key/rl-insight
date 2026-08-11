@@ -113,12 +113,6 @@ def tempo_export(
         logger.error("output_dir is required for tempo_export")
         return 1
 
-    out = Path(output_dir)
-    tempo_out = out / "tempo"
-    if tempo_out.exists():
-        _shutil.rmtree(tempo_out)
-    tempo_out.mkdir(parents=True, exist_ok=True)
-
     # Build TraceQL query
     conditions: list[str] = []
     effective_project = project if project and project != "*" else None
@@ -136,12 +130,46 @@ def tempo_export(
         query = "{}"
     logger.info("Tempo TraceQL query: %s", query)
 
+    import time as _time
+
+    # Pre-flight: check if any traces exist for this project/experiment
+    if effective_project or effective_experiment:
+        _check_url = f"{tempo_url.rstrip('/')}/api/search"
+        try:
+            _check_resp = requests.get(
+                _check_url,
+                params={
+                    "q": query,
+                    "limit": 1,
+                    "start": int(_time.time()) - 7 * 86400,
+                    "end": int(_time.time()),
+                },
+                timeout=10,
+            )
+            _check_resp.raise_for_status()
+            _check_traces = _check_resp.json().get("traces", [])
+            if not _check_traces:
+                logger.error(
+                    "No traces found for project=%s experiment_name=%s. "
+                    "Check that the project/experiment exists and has trace data.",
+                    effective_project or "*", effective_experiment or "*",
+                )
+                return 1
+        except requests.RequestException as exc:
+            logger.error("Pre-flight search failed: %s", exc)
+            return 1
+
+    out = Path(output_dir)
+    tempo_out = out / "tempo"
+    if tempo_out.exists():
+        _shutil.rmtree(tempo_out)
+    tempo_out.mkdir(parents=True, exist_ok=True)
+
     # Search for matching trace IDs with pagination
     all_trace_ids: list[str] = []
     search_url = f"{tempo_url.rstrip('/')}/api/search"
 
     try:
-        import time as _time
         resp = requests.get(
             search_url,
             params={

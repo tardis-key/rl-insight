@@ -396,6 +396,7 @@ def prometheus_export(
     import subprocess as _subprocess
     import tempfile as _tempfile
     import datetime as _datetime
+    import time as _time
     from pathlib import Path as _Path
 
     project = _wild_to_none(project)
@@ -420,6 +421,35 @@ def prometheus_export(
     if not tsdb_path.exists():
         logger.error("Prometheus data directory not found: %s", tsdb_path)
         return 1
+
+    # Pre-flight: check if metrics exist for this project/experiment
+    if project is not None or experiment_name is not None:
+        _series_url = prometheus_url.rstrip("/") + "/api/v1/series"
+        _match_labels = []
+        if project is not None:
+            _match_labels.append(f'project="{project}"')
+        if experiment_name is not None:
+            _match_labels.append(f'experiment_name="{experiment_name}"')
+        _match_str = "{" + ",".join(_match_labels) + "}"
+        try:
+            import requests as _requests
+            _series_resp = _requests.get(
+                _series_url,
+                params={"match[]": _match_str, "start": str(int(_time.time()))},
+                timeout=10,
+            )
+            _series_resp.raise_for_status()
+            _series_data = _series_resp.json()
+            if _series_data.get("status") != "success" or not _series_data.get("data"):
+                logger.error(
+                    "No metrics found for project=%s experiment_name=%s. "
+                    "Check that the project/experiment exists and has metric data.",
+                    project or "*", experiment_name or "*",
+                )
+                return 1
+        except Exception as exc:
+            logger.error("Pre-flight Prometheus series check failed: %s", exc)
+            return 1
 
     prom_out = out / "prometheus"
     prom_out.mkdir(parents=True, exist_ok=True)
