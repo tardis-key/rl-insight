@@ -395,6 +395,7 @@ def prometheus_export(
     import shutil as _shutil
     import subprocess as _subprocess
     import tempfile as _tempfile
+    import datetime as _datetime
     from pathlib import Path as _Path
 
     project = _wild_to_none(project)
@@ -427,9 +428,19 @@ def prometheus_export(
     if project is None and experiment_name is None:
         logger.info("No label filter specified, copying all blocks...")
         for item in tsdb_path.iterdir():
-            if item.is_dir() and item.name not in ("chunks_head", "wal") and not item.name.startswith("tmp_dbro_sandbox"):
+            if item.is_dir() and item.name not in ("chunks_head", "wal", "snapshots") and not item.name.startswith("tmp_dbro_sandbox"):
                 _shutil.copytree(item, prom_out / item.name, dirs_exist_ok=True)
         logger.info("Exported Prometheus blocks to %s", prom_out)
+
+        # Write manifest
+        import json as _json
+        manifest = {
+            "project": project or "*",
+            "experiment_name": experiment_name or "*",
+            "exported_at": _datetime.datetime.now().isoformat(),
+            "source": str(tsdb_path),
+        }
+        (out / "manifest.json").write_text(_json.dumps(manifest, indent=2))
         return 0
 
     # Filtered export: dump -> filter -> rebuild

@@ -90,9 +90,9 @@ def tempo_export(
 ) -> int:
     """Export Tempo traces filtered by project/experiment span attributes.
 
-    Uses TraceQL search with pagination, fetches full trace JSON for each matching
-    trace, and saves the combined result as ``traces.json`` under
-    ``{output_dir}/tempo/``.
+    Uses TraceQL search with pagination across the full time range (Unix epoch 0
+    to now), fetches full trace JSON for each matching trace, and saves the combined
+    result as ``traces.json`` under ``{output_dir}/tempo/``.
 
     Args:
         project: Filter by ``span.project`` attribute. ``None`` or ``"*"`` means no filter.
@@ -141,9 +141,15 @@ def tempo_export(
     search_url = f"{tempo_url.rstrip('/')}/api/search"
 
     try:
+        import time as _time
         resp = requests.get(
             search_url,
-            params={"q": query, "limit": 10000},
+            params={
+                "q": query,
+                "limit": 10000,
+                "start": int(_time.time()) - 7 * 86400,  # 7 days (Tempo max search range)
+                "end": int(_time.time()),
+            },
             timeout=30,
         )
         resp.raise_for_status()
@@ -188,9 +194,12 @@ def tempo_import(
 ) -> int:
     """Import Tempo traces from an exported ``traces.json`` by replaying to the target OTLP endpoint.
 
-    Reads ``{input_dir}/tempo/traces.json`` (written by :func:`tempo_export`), converts
-    the ``batches`` key to the OTLP ``resourceSpans`` format, and POSTs to the OTLP
-    HTTP endpoint.
+    Reads ``{input_dir}/tempo/traces.json`` (written by :func:`tempo_export`), reconstructs
+    spans via the OpenTelemetry SDK, and exports them to the OTLP endpoint using
+    protobuf serialization (same code path as normal trace reporting).
+
+    Original timestamps are mapped to a recent time window (last 10 minutes) to ensure
+    Tempo's ingester accepts and makes them immediately queryable.
 
     Args:
         input_dir: Directory containing ``tempo/traces.json``.
@@ -202,7 +211,7 @@ def tempo_import(
     import json as _json
     from pathlib import Path
 
-    import requests
+    import time as _time
 
     input_parent = Path(input_dir) / "tempo"
     traces_file = input_parent / "traces.json"
@@ -221,29 +230,99 @@ def tempo_import(
         logger.warning("No trace batches in %s; nothing to import", traces_file)
         return 0
 
-    # Convert Tempo "batches" to OTLP "resourceSpans"
-    # Tempo stores traceId/spanId as base64; OTLP expects hex
+    # Decode base64 traceId/spanId to hex for OTLP
     _decode_b64_ids(batches)
 
-    otlp_payload: dict[str, Any] = {"resourceSpans": batches}
+    # Compute timestamp remapping: original range -> last 10 minutes
+    now_ns = int(_time.time() * 1e9)
+    min_ts = float("inf")
+    max_ts = 0.0
+    for batch in batches:
+        for ss in batch.get("scopeSpans", []):
+            for span in ss.get("spans", []):
+                start_ns = int(span["startTimeUnixNano"])
+                end_ns = int(span["endTimeUnixNano"])
+                if start_ns < min_ts:
+                    min_ts = start_ns
+                if end_ns > max_ts:
+                    max_ts = end_ns
 
-    try:
-        resp = requests.post(
-            otlp_url,
-            json=otlp_payload,
-            headers={"Content-Type": "application/json"},
-            timeout=30,
-        )
-        if resp.status_code >= 400:
-            logger.error(
-                "OTLP import returned %d: %s", resp.status_code, resp.text[:500]
-            )
-            return 1
-    except requests.RequestException as exc:
-        logger.error("OTLP import request failed: %s", exc)
-        return 1
+    target_min = now_ns - 10 * 60 * int(1e9)  # 10 minutes ago
+    target_max = now_ns
+    orig_range = max_ts - min_ts if max_ts > min_ts else 1
+    target_range = target_max - target_min
+    logger.info(
+        "Remapping timestamps: orig [%d, %d] -> target [%d, %d]",
+        int(min_ts // 1e9), int(max_ts // 1e9),
+        int(target_min // 1e9), int(target_max // 1e9),
+    )
 
-    logger.info("Imported %d batch(es) via OTLP", len(batches))
+    # Use OpenTelemetry SDK for protobuf serialization (same as normal trace reporting)
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.trace import SpanKind
+
+    resource = Resource.create({"service.name": "rl_insight_monitor"})
+    provider = TracerProvider(resource=resource)
+    exporter = OTLPSpanExporter(endpoint=otlp_url)
+    provider.add_span_processor(BatchSpanProcessor(
+        exporter,
+        schedule_delay_millis=500,
+        max_export_batch_size=200,
+    ))
+    tracer = provider.get_tracer(__name__)
+
+    kind_map = {
+        "SPAN_KIND_UNSPECIFIED": SpanKind.INTERNAL,
+        "SPAN_KIND_INTERNAL": SpanKind.INTERNAL,
+        "SPAN_KIND_SERVER": SpanKind.SERVER,
+        "SPAN_KIND_CLIENT": SpanKind.CLIENT,
+        "SPAN_KIND_PRODUCER": SpanKind.PRODUCER,
+        "SPAN_KIND_CONSUMER": SpanKind.CONSUMER,
+        1: SpanKind.INTERNAL,
+        2: SpanKind.SERVER,
+        3: SpanKind.CLIENT,
+        4: SpanKind.PRODUCER,
+        5: SpanKind.CONSUMER,
+    }
+
+    imported = 0
+    for batch in batches:
+        for ss in batch.get("scopeSpans", []):
+            for span_data in ss.get("spans", []):
+                # Remap timestamps to recent window
+                orig_start = int(span_data["startTimeUnixNano"])
+                orig_end = int(span_data["endTimeUnixNano"])
+                new_start = int(target_min + (orig_start - min_ts) * target_range / orig_range)
+                new_end = int(target_min + (orig_end - min_ts) * target_range / orig_range)
+                if new_end <= new_start:
+                    new_end = new_start + 1000000  # 1ms minimum
+
+                # Build attributes
+                attrs: dict[str, Any] = {}
+                for attr in span_data.get("attributes", []):
+                    val = attr.get("value", {})
+                    if "stringValue" in val:
+                        attrs[attr["key"]] = val["stringValue"]
+                    elif "intValue" in val:
+                        attrs[attr["key"]] = int(val["intValue"])
+
+                kind_raw = span_data.get("kind", "SPAN_KIND_INTERNAL")
+                kind = kind_map.get(kind_raw, SpanKind.INTERNAL)
+
+                span = tracer.start_span(
+                    span_data["name"],
+                    kind=kind,
+                    attributes=attrs,
+                    start_time=new_start,
+                )
+                span.end(end_time=new_end)
+                imported += 1
+
+    provider.force_flush()
+    logger.info("Imported %d span(s) via OTLP (protobuf)", imported)
     return 0
 
 

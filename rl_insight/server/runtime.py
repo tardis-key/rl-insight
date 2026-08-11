@@ -405,6 +405,8 @@ def _render_tempo_config(
         .setdefault("http", {})
     )
     receiver["endpoint"] = format_host_port(local_addresses()["bind"], otlp_port)
+    # Disable time-based block cutting so spans with old timestamps stay queryable
+    data.setdefault("ingester", {})["max_block_duration"] = "0s"
     trace = data.setdefault("storage", {}).setdefault("trace", {})
     trace.setdefault("backend", "local")
     trace.setdefault("local", {})["path"] = str((tempo_data / "traces").resolve())
@@ -569,6 +571,7 @@ def _service_command(
                 local_addresses()["bind"], conf.prometheus.prometheus_port
             ),
             "--web.enable-lifecycle",
+            "--web.enable-admin-api",
             f"--storage.tsdb.path={data_dir.resolve()}",
         ]
         retention_time = _select_str(conf, "prometheus.retention_time")

@@ -137,9 +137,6 @@ def _add_common_config_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
 
 def _add_data_parser(subparsers: argparse._SubParsersAction) -> None:
     """Attach ``export`` and ``import`` subcommands for data migration."""
@@ -252,7 +249,7 @@ def _handle_export(args: argparse.Namespace) -> int:
         print("Prometheus export FAILED")
         return ret
 
-    # Tempo export
+    # Tempo export (non-fatal if unavailable)
     print()
     print("--- Tempo Export ---")
     ret = _tempo_export(
@@ -262,8 +259,7 @@ def _handle_export(args: argparse.Namespace) -> int:
         tempo_url=args.tempo_url,
     )
     if ret != 0:
-        print("Tempo export FAILED")
-        return ret
+        print("Tempo export failed (non-fatal, Prometheus data exported successfully)")
 
     print()
     print(f"Export complete: {args.output}")
@@ -290,7 +286,7 @@ def _handle_import(args: argparse.Namespace) -> int:
         print("Prometheus import FAILED")
         return ret
 
-    # Tempo import
+    # Tempo import (non-fatal if unavailable or traces missing)
     print()
     print("--- Tempo Import ---")
     ret = _tempo_import(
@@ -298,9 +294,12 @@ def _handle_import(args: argparse.Namespace) -> int:
         otlp_url=args.tempo_otlp_url,
     )
     if ret != 0:
-        print("Tempo import FAILED")
-        return ret
+        print("Tempo import failed (non-fatal, Prometheus data imported successfully)")
 
     print()
     print(f"Import complete from {args.input}")
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
