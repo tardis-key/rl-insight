@@ -435,7 +435,7 @@ def prometheus_export(
             import requests as _requests
             _series_resp = _requests.get(
                 _series_url,
-                params={"match[]": _match_str, "start": str(int(_time.time()))},
+                params={"match[]": _match_str},
                 timeout=10,
             )
             _series_resp.raise_for_status()
