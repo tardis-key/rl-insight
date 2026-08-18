@@ -222,21 +222,49 @@
                     {
                       "type": "value",
                       "options": {
-                        "length": {
-                          "color": "red",
+                        "tool_calls": {
+                          "color": "yellow",
                           "index": 0
+                        },
+                        "completed": {
+                          "color": "yellow",
+                          "index": 1
+                        },
+                        "finished": {
+                          "color": "blue",
+                          "index": 2
                         },
                         "stop": {
                           "color": "blue",
-                          "index": 1
+                          "index": 3
                         },
-                        "tool_calls": {
-                          "color": "yellow",
-                          "index": 2
+                        "length": {
+                          "color": "red",
+                          "index": 4
+                        },
+                        "token_limit": {
+                          "color": "red",
+                          "index": 5
+                        },
+                        "timeout_limit": {
+                          "color": "red",
+                          "index": 6
+                        },
+                        "max_steps": {
+                          "color": "red",
+                          "index": 7
+                        },
+                        "max_step_limit": {
+                          "color": "red",
+                          "index": 8
+                        },
+                        "error": {
+                          "color": "text",
+                          "index": 9
                         },
                         "unknown": {
                           "color": "text",
-                          "index": 3
+                          "index": 10
                         }
                       }
                     }
