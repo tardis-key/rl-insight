@@ -127,247 +127,13 @@
                 },
                 {
                   "kind": "Transformation",
-                  "group": "organize",
+                  "group": "extractFields",
                   "spec": {
                     "options": {
-                      "excludeByName": {
-                        "Duration": true,
-                        "Duration / 1000000": true,
-                        "Name": true,
-                        "name": true,
-                        "Span ID": true,
-                        "spanID": true,
-                        "Trace Service": true,
-                        "traceService": true,
-                        "traceIdHidden": true,
-                        "traceName": true,
-                        "service.name": true,
-                        "sample": true,
-                        "session": true,
-                        "session_id": true,
-                        "turn": true,
-                        "traj": true,
-                        "type": true,
-                        "tools": true,
-                        "content": true,
-                        "run_id": true,
-                        "sample_success_count": true,
-                        "sample_total_trajs": true
-                      },
-                      "includeByName": {},
-                      "indexByName": {},
-                      "renameByName": {
-                        "finish_reason": "State"
-                      }
-                    }
-                  }
-                },
-                {
-                  "kind": "Transformation",
-                  "group": "partitionByValues",
-                  "spec": {
-                    "options": {
-                      "fields": [
-                        "state_lane_id"
-                      ],
-                      "keepFields": false
-                    }
-                  }
-                }
-              ],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "state-timeline",
-            "version": "13.0.2",
-            "spec": {
-              "options": {
-                "alignValue": "left",
-                "annotations": {
-                  "clustering": -1,
-                  "multiLane": false
-                },
-                "legend": {
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": true
-                },
-                "mergeValues": false,
-                "rowHeight": 0.9,
-                "showValue": "auto",
-                "tooltip": {
-                  "hideZeros": false,
-                  "mode": "single",
-                  "sort": "none"
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "mappings": [
-                    {
-                      "type": "value",
-                      "options": {
-                        "length": {
-                          "color": "red",
-                          "index": 0
-                        },
-                        "stop": {
-                          "color": "blue",
-                          "index": 1
-                        },
-                        "tool_calls": {
-                          "color": "yellow",
-                          "index": 2
-                        },
-                        "unknown": {
-                          "color": "text",
-                          "index": 3
-                        }
-                      }
-                    }
-                  ],
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "value": 0,
-                        "color": "green"
-                      }
-                    ]
-                  },
-                  "color": {
-                    "mode": "thresholds"
-                  },
-                  "custom": {
-                    "axisPlacement": "auto",
-                    "fillOpacity": 70,
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "insertNulls": false,
-                    "lineWidth": 2,
-                    "spanNulls": false
-                  }
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "agent-loop-repeat-sequence": {
-        "kind": "Panel",
-        "spec": {
-          "id": 326,
-          "title": "Turn sequence",
-          "description": "Turn sequence for this trajectory. Hover for finish_reason and time.",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "tempo",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "tempo"
-                      },
-                      "spec": {
-                        "limit": 500,
-                        "metricsQueryType": "range",
-                        "query": "{span.state_lane_id =~ \"run=${run_id}/${session}/traj=${traj}\" && span.run_id = \"${run_id}\" && resource.service.name=\"rl_insight_monitor\"} | select(span.turn, span.finish_reason)",
-                        "queryType": "traceql",
-                        "serviceMapUseNativeHistograms": false,
-                        "spss": 100,
-                        "tableType": "spans"
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [
-                {
-                  "kind": "Transformation",
-                  "group": "organize",
-                  "spec": {
-                    "options": {
-                      "excludeByName": {},
-                      "includeByName": {},
-                      "indexByName": {},
-                      "renameByName": {
-                        "time": "Start time",
-                        "duration": "Duration"
-                      }
-                    }
-                  }
-                },
-                {
-                  "kind": "Transformation",
-                  "group": "calculateField",
-                  "spec": {
-                    "options": {
-                      "binary": {
-                        "left": {
-                          "matcher": {
-                            "id": "byName",
-                            "options": "Duration"
-                          }
-                        },
-                        "operator": "/",
-                        "right": {
-                          "fixed": "1000000"
-                        }
-                      },
-                      "mode": "binary",
-                      "reduce": {
-                        "reducer": "sum"
-                      }
-                    }
-                  }
-                },
-                {
-                  "kind": "Transformation",
-                  "group": "calculateField",
-                  "spec": {
-                    "options": {
-                      "alias": "End time",
-                      "mode": "reduceRow",
-                      "reduce": {
-                        "include": [
-                          "Start time",
-                          "Duration / 1000000"
-                        ],
-                        "reducer": "sum"
-                      }
-                    }
-                  }
-                },
-                {
-                  "kind": "Transformation",
-                  "group": "convertFieldType",
-                  "spec": {
-                    "options": {
-                      "conversions": [
-                        {
-                          "destinationType": "time",
-                          "targetField": "Start time"
-                        },
-                        {
-                          "destinationType": "time",
-                          "targetField": "End time"
-                        }
-                      ],
-                      "fields": {}
+                      "source": "state_lane_id",
+                      "format": "regexp",
+                      "regExp": "/(?<traj_label>traj=\\d+)/",
+                      "replace": false
                     }
                   }
                 },
@@ -406,6 +172,18 @@
                       "renameByName": {
                         "finish_reason": "State"
                       }
+                    }
+                  }
+                },
+                {
+                  "kind": "Transformation",
+                  "group": "partitionByValues",
+                  "spec": {
+                    "options": {
+                      "fields": [
+                        "traj_label"
+                      ],
+                      "keepFields": false
                     }
                   }
                 }
@@ -686,25 +464,8 @@
                     {
                       "kind": "RowsLayoutRow",
                       "spec": {
-                        "title": "${run_id:text}",
+                        "title": "${sample:text}",
                         "collapse": true,
-                        "conditionalRendering": {
-                          "kind": "ConditionalRenderingGroup",
-                          "spec": {
-                            "visibility": "show",
-                            "condition": "and",
-                            "items": [
-                              {
-                                "kind": "ConditionalRenderingVariable",
-                                "spec": {
-                                  "variable": "has_agent_loop_data",
-                                  "operator": "equals",
-                                  "value": "1"
-                                }
-                              }
-                            ]
-                          }
-                        },
                         "hideHeader": false,
                         "layout": {
                           "kind": "RowsLayout",
@@ -713,7 +474,7 @@
                               {
                                 "kind": "RowsLayoutRow",
                                 "spec": {
-                                  "title": "${sample:text}",
+                                  "title": "${session:text}",
                                   "collapse": true,
                                   "hideHeader": false,
                                   "layout": {
@@ -723,83 +484,51 @@
                                         {
                                           "kind": "RowsLayoutRow",
                                           "spec": {
-                                            "title": "${session:text}",
+                                            "title": "",
+                                            "collapse": false,
+                                            "hideHeader": true,
+                                            "layout": {
+                                              "kind": "GridLayout",
+                                              "spec": {
+                                                "items": [
+                                                  {
+                                                    "kind": "GridLayoutItem",
+                                                    "spec": {
+                                                      "x": 0,
+                                                      "y": 0,
+                                                      "width": 24,
+                                                      "height": 8,
+                                                      "element": {
+                                                        "kind": "ElementReference",
+                                                        "name": "agent-loop-repeat-overview"
+                                                      }
+                                                    }
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "kind": "RowsLayoutRow",
+                                          "spec": {
+                                            "title": "${traj:text}",
                                             "collapse": true,
                                             "hideHeader": false,
                                             "layout": {
-                                              "kind": "RowsLayout",
+                                              "kind": "GridLayout",
                                               "spec": {
-                                                "rows": [
+                                                "items": [
                                                   {
-                                                    "kind": "RowsLayoutRow",
+                                                    "kind": "GridLayoutItem",
                                                     "spec": {
-                                                      "title": "",
-                                                      "collapse": false,
-                                                      "hideHeader": true,
-                                                      "layout": {
-                                                        "kind": "GridLayout",
-                                                        "spec": {
-                                                          "items": [
-                                                            {
-                                                              "kind": "GridLayoutItem",
-                                                              "spec": {
-                                                                "x": 0,
-                                                                "y": 0,
-                                                                "width": 24,
-                                                                "height": 8,
-                                                                "element": {
-                                                                  "kind": "ElementReference",
-                                                                  "name": "agent-loop-repeat-overview"
-                                                                }
-                                                              }
-                                                            }
-                                                          ]
-                                                        }
-                                                      }
-                                                    }
-                                                  },
-                                                  {
-                                                    "kind": "RowsLayoutRow",
-                                                    "spec": {
-                                                      "title": "${traj:text}",
-                                                      "collapse": true,
-                                                      "hideHeader": false,
-                                                      "layout": {
-                                                        "kind": "GridLayout",
-                                                        "spec": {
-                                                          "items": [
-                                                            {
-                                                              "kind": "GridLayoutItem",
-                                                              "spec": {
-                                                                "x": 0,
-                                                                "y": 0,
-                                                                "width": 24,
-                                                                "height": 6,
-                                                                "element": {
-                                                                  "kind": "ElementReference",
-                                                                  "name": "agent-loop-repeat-sequence"
-                                                                }
-                                                              }
-                                                            },
-                                                            {
-                                                              "kind": "GridLayoutItem",
-                                                              "spec": {
-                                                                "x": 0,
-                                                                "y": 6,
-                                                                "width": 24,
-                                                                "height": 8,
-                                                                "element": {
-                                                                  "kind": "ElementReference",
-                                                                  "name": "agent-loop-repeat-details"
-                                                                }
-                                                              }
-                                                            }
-                                                          ]
-                                                        }
-                                                      },
-                                                      "repeat": {
-                                                        "mode": "variable",
-                                                        "value": "traj"
+                                                      "x": 0,
+                                                      "y": 0,
+                                                      "width": 24,
+                                                      "height": 8,
+                                                      "element": {
+                                                        "kind": "ElementReference",
+                                                        "name": "agent-loop-repeat-details"
                                                       }
                                                     }
                                                   }
@@ -808,45 +537,8 @@
                                             },
                                             "repeat": {
                                               "mode": "variable",
-                                              "value": "session"
-                                            },
-                                            "variables": [
-                                              {
-                                                "kind": "QueryVariable",
-                                                "spec": {
-                                                  "name": "traj",
-                                                  "label": "traj",
-                                                  "hide": "hideVariable",
-                                                  "refresh": "onDashboardLoad",
-                                                  "skipUrlSync": true,
-                                                  "description": "Section-scoped Repeat variable (needs dashboardSectionVariables).",
-                                                  "query": {
-                                                    "kind": "DataQuery",
-                                                    "group": "prometheus",
-                                                    "version": "v0",
-                                                    "datasource": {
-                                                      "name": "${datasource}"
-                                                    },
-                                                    "spec": {
-                                                      "query": "query_result(rl_insight_monitor_agent_loop_traj_info{run_id=~\"$run_id\",leaf=~\"$session/traj=.*\"})",
-                                                      "refId": "StandardVariableQuery"
-                                                    }
-                                                  },
-                                                  "regex": "/title=\"(?<text>[^\"]+)\".*traj=\"(?<value>[^\"]+)\"/",
-                                                  "regexApplyTo": "value",
-                                                  "sort": "alphabeticalAsc",
-                                                  "definition": "query_result(rl_insight_monitor_agent_loop_traj_info{run_id=~\"$run_id\",leaf=~\"$session/traj=.*\"})",
-                                                  "options": [],
-                                                  "allowCustomValue": false,
-                                                  "current": {
-                                                    "text": "All",
-                                                    "value": "$__all"
-                                                  },
-                                                  "multi": true,
-                                                  "includeAll": true
-                                                }
-                                              }
-                                            ]
+                                              "value": "traj"
+                                            }
                                           }
                                         }
                                       ]
@@ -854,14 +546,14 @@
                                   },
                                   "repeat": {
                                     "mode": "variable",
-                                    "value": "sample"
+                                    "value": "session"
                                   },
                                   "variables": [
                                     {
                                       "kind": "QueryVariable",
                                       "spec": {
-                                        "name": "session",
-                                        "label": "session",
+                                        "name": "traj",
+                                        "label": "traj",
                                         "hide": "hideVariable",
                                         "refresh": "onDashboardLoad",
                                         "skipUrlSync": true,
@@ -874,14 +566,14 @@
                                             "name": "${datasource}"
                                           },
                                           "spec": {
-                                            "query": "query_result(rl_insight_monitor_agent_loop_session_info{run_id=~\"$run_id\",sample=~\"$sample\"})",
+                                            "query": "query_result(rl_insight_monitor_agent_loop_traj_info{run_id=~\"$run_id\",leaf=~\"$session/traj=.*\"})",
                                             "refId": "StandardVariableQuery"
                                           }
                                         },
-                                        "regex": "/sess_key=\"(?<value>[^\"]+)\".*title=\"(?<text>[^\"]+)\"/",
+                                        "regex": "/title=\"(?<text>[^\"]+)\".*traj=\"(?<value>[^\"]+)\"/",
                                         "regexApplyTo": "value",
                                         "sort": "alphabeticalAsc",
-                                        "definition": "query_result(rl_insight_monitor_agent_loop_session_info{run_id=~\"$run_id\",sample=~\"$sample\"})",
+                                        "definition": "query_result(rl_insight_monitor_agent_loop_traj_info{run_id=~\"$run_id\",leaf=~\"$session/traj=.*\"})",
                                         "options": [],
                                         "allowCustomValue": false,
                                         "current": {
@@ -900,14 +592,14 @@
                         },
                         "repeat": {
                           "mode": "variable",
-                          "value": "run_id"
+                          "value": "sample"
                         },
                         "variables": [
                           {
                             "kind": "QueryVariable",
                             "spec": {
-                              "name": "sample",
-                              "label": "sample",
+                              "name": "session",
+                              "label": "session",
                               "hide": "hideVariable",
                               "refresh": "onDashboardLoad",
                               "skipUrlSync": true,
@@ -920,14 +612,14 @@
                                   "name": "${datasource}"
                                 },
                                 "spec": {
-                                  "query": "query_result(rl_insight_monitor_agent_loop_sample_info{run_id=~\"$run_id\"})",
+                                  "query": "query_result(rl_insight_monitor_agent_loop_session_info{run_id=~\"$run_id\",sample=~\"$sample\"})",
                                   "refId": "StandardVariableQuery"
                                 }
                               },
-                              "regex": "/sample=\"(?<value>[^\"]+)\".*title=\"(?<text>[^\"]+)\"/",
+                              "regex": "/sess_key=\"(?<value>[^\"]+)\".*title=\"(?<text>[^\"]+)\"/",
                               "regexApplyTo": "value",
-                              "sort": "numericalAsc",
-                              "definition": "query_result(rl_insight_monitor_agent_loop_sample_info{run_id=~\"$run_id\"})",
+                              "sort": "alphabeticalAsc",
+                              "definition": "query_result(rl_insight_monitor_agent_loop_session_info{run_id=~\"$run_id\",sample=~\"$sample\"})",
                               "options": [],
                               "allowCustomValue": false,
                               "current": {
@@ -938,12 +630,66 @@
                               "includeAll": true
                             }
                           }
-                        ]
+                        ],
+                        "conditionalRendering": {
+                          "kind": "ConditionalRenderingGroup",
+                          "spec": {
+                            "visibility": "show",
+                            "condition": "and",
+                            "items": [
+                              {
+                                "kind": "ConditionalRenderingVariable",
+                                "spec": {
+                                  "variable": "has_agent_loop_data",
+                                  "operator": "equals",
+                                  "value": "1"
+                                }
+                              }
+                            ]
+                          }
+                        }
                       }
                     }
                   ]
                 }
-              }
+              },
+              "variables": [
+                {
+                  "kind": "QueryVariable",
+                  "spec": {
+                    "name": "sample",
+                    "label": "sample",
+                    "hide": "hideVariable",
+                    "refresh": "onDashboardLoad",
+                    "skipUrlSync": true,
+                    "description": "Section-scoped Repeat variable (needs dashboardSectionVariables).",
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${datasource}"
+                      },
+                      "spec": {
+                        "query": "query_result(rl_insight_monitor_agent_loop_sample_info{run_id=~\"$run_id\"})",
+                        "refId": "StandardVariableQuery"
+                      }
+                    },
+                    "regex": "/sample=\"(?<value>[^\"]+)\".*title=\"(?<text>[^\"]+)\"/",
+                    "regexApplyTo": "value",
+                    "sort": "numericalAsc",
+                    "definition": "query_result(rl_insight_monitor_agent_loop_sample_info{run_id=~\"$run_id\"})",
+                    "options": [],
+                    "allowCustomValue": false,
+                    "current": {
+                      "text": "All",
+                      "value": "$__all"
+                    },
+                    "multi": true,
+                    "includeAll": true
+                  }
+                }
+              ]
             }
           }
         ]
@@ -961,9 +707,8 @@
     ],
     "timeSettings": {
       "timezone": "browser",
-      "from": "now-15m",
+      "from": "now-2h",
       "to": "now",
-      "autoRefresh": "5s",
       "autoRefreshIntervals": [
         "5s",
         "10s",
@@ -1005,7 +750,7 @@
         "spec": {
           "name": "run_id",
           "label": "run_id",
-          "hide": "hideVariable",
+          "hide": "",
           "refresh": "onTimeRangeChanged",
           "skipUrlSync": true,
           "description": "Section-scoped Repeat variable (needs dashboardSectionVariables).",
@@ -1021,18 +766,18 @@
               "refId": "StandardVariableQuery"
             }
           },
-          "regex": "/run_id=\"(?<value>[^\"]+)\".*title=\"(?<text>[^\"]+)\"/",
+          "regex": "/run_id=\"(?<value>[^\"]+)\"/",
           "regexApplyTo": "value",
           "sort": "alphabeticalDesc",
           "definition": "query_result(rl_insight_monitor_agent_loop_run_info and on(run_id) ((rl_insight_monitor_agent_loop_first_turn_unixtime <= $__to / 1000) and (rl_insight_monitor_agent_loop_last_turn_unixtime >= $__from / 1000)))",
           "options": [],
           "allowCustomValue": false,
           "current": {
-            "text": "All",
-            "value": "$__all"
+            "text": "export-1787037718-c5c2457d",
+            "value": "export-1787037718-c5c2457d"
           },
-          "multi": true,
-          "includeAll": true
+          "multi": false,
+          "includeAll": false
         }
       },
       {
