@@ -170,7 +170,7 @@
                       "includeByName": {},
                       "indexByName": {},
                       "renameByName": {
-                        "finish_reason": "State"
+                        "finish_reason": ""
                       }
                     }
                   }
@@ -210,9 +210,9 @@
                   "placement": "bottom",
                   "showLegend": true
                 },
-                "mergeValues": false,
+                "mergeValues": true,
                 "rowHeight": 0.9,
-                "showValue": "auto",
+                "showValue": "never",
                 "tooltip": {
                   "hideZeros": false,
                   "mode": "single",

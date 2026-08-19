@@ -342,7 +342,6 @@ class _TraceOpInvocation:
         # Snapshot the enabled state once so timing and emit stay consistent.
         self._enabled = _STATE.enabled and _STATE.client is not None
         self.name = name or func.__qualname__
-        self.attributes: dict[str, Any] = {}
         self._start_time_ns = 0
         if not self._enabled:
             return
