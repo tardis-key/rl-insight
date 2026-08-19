@@ -183,7 +183,10 @@
                       "fields": [
                         "traj_label"
                       ],
-                      "keepFields": false
+                      "keepFields": false,
+                      "naming": {
+                        "asLabels": false
+                      }
                     }
                   }
                 }
