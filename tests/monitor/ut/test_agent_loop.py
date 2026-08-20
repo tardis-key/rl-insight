@@ -20,9 +20,9 @@ class Trajectory:
 
 
 def test_agent_loop_lane_id_should_use_canonical_format() -> None:
-    lane_id = agent_loop.agent_loop_lane_id("run-a", 1, 0, 2)
+    lane_id = agent_loop.agent_loop_lane_id("experiment-a", 1, 0, 2)
 
-    assert lane_id == "run=run-a/sample=1/session=0/traj=2"
+    assert lane_id == "experiment=experiment-a/sample=1/session=0/traj=2"
 
 
 def test_agent_loop_session_metadata_should_emit_dashboard_hierarchy(
@@ -36,7 +36,8 @@ def test_agent_loop_session_metadata_should_emit_dashboard_hierarchy(
     monkeypatch.setattr(agent_loop, "metric_gauge", metric_gauge)
 
     agent_loop._publish_agent_loop_session(
-        run_id="run-a",
+        experiment_name="experiment-a",
+        global_steps=7,
         sample=1,
         session=0,
         trajectories=[Trajectory(chain_id=2, reward_score=0.75, num_turns=3)],
@@ -53,6 +54,8 @@ def test_agent_loop_session_metadata_should_emit_dashboard_hierarchy(
         ("agent_loop_last_turn_unixtime", 2.0),
     ]
     assert events[3][2]["traj"] == "1"
+    assert events[0][2]["experiment_name"] == "experiment-a"
+    assert events[0][2]["global_steps"] == "7"
     assert events[3][2]["leaf"] == "sample=1/session=0/traj=1"
     assert events[3][2]["title"] == "Trajectory #1 · reward 0.75 · 3 turns"
 
@@ -66,7 +69,7 @@ def test_agent_loop_session_metadata_should_not_raise_when_gauge_fails(
     monkeypatch.setattr(agent_loop, "metric_gauge", metric_gauge)
 
     agent_loop._publish_agent_loop_session(
-        run_id="run-a",
+        experiment_name="experiment-a",
         sample=1,
         session=0,
         trajectories=[],
@@ -84,7 +87,7 @@ def test_agent_loop_session_should_build_identity_and_finish_span(
     monkeypatch.setattr(agent_loop, "trace_span", trace_span)
 
     session = agent_loop.agent_loop_session(
-        run_id="run-a",
+        experiment_name="experiment-a",
         sample=1,
         session=0,
         uid="uid-a",
@@ -93,11 +96,11 @@ def test_agent_loop_session_should_build_identity_and_finish_span(
     )
 
     assert session.identity == {
-        "run_id": "run-a",
+        "experiment_name": "experiment-a",
         "sample": "1",
         "session": "0",
         "traj": "0",
-        "state_lane_id": "run=run-a/sample=1/session=0/traj=0",
+        "state_lane_id": "experiment=experiment-a/sample=1/session=0/traj=0",
         "uid": "uid-a",
         "global_steps": 7,
         "session_id": "session-a",
@@ -113,7 +116,7 @@ def test_agent_loop_session_should_build_identity_and_finish_span(
 
     attributes = spans[0]["attributes"]
     assert spans[0]["name"] == "agent_session"
-    assert attributes["state_lane_id"] == "run=run-a/sample=1/session=0/traj=0"
+    assert attributes["state_lane_id"] == "experiment=experiment-a/sample=1/session=0/traj=0"
     assert attributes["runner_name"] == "task"
     assert attributes["status"] == "success"
     assert attributes["num_trajectories"] == 1

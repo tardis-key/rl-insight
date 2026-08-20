@@ -203,13 +203,12 @@ Prometheus  rl_insight_monitor_agent_loop_{run,sample,session,traj}_info
             rl_insight_monitor_agent_loop_{first,last}_turn_unixtime
         →   nested Repeat rows (titles from each `*_info` `title` label)
 
-Tempo       turn spans keyed by `state_lane_id` (and `run_id`, …)
+Tempo       turn spans keyed by `state_lane_id` (and `project`, `experiment_name`, `global_steps`, …)
         →   Trajectory Overview / Turn sequence / Turn details
 ```
 
-`$run_id` / `$has_agent_loop_data` select runs whose turn activity overlaps the dashboard time range (`first_turn_unixtime` / `last_turn_unixtime` vs `$__from` / `$__to`). Nested `$sample` / `$session` / `$traj` enumerate children under the selected parent.
+`$project` / `$experiment` / `$step` / `$has_agent_loop_data` select runs whose turn activity overlaps the dashboard time range (`first_turn_unixtime` / `last_turn_unixtime` vs `$__from` / `$__to`). Nested `$sample` / `$session` / `$traj` enumerate children under the selected parent.
 
 **Effect** (example after `generate_trace_data.py` verify; Grafana UID `a1b2c3d4-e5f6-7890-abcd-ef1234567890`):
 
 ![Agent Loop nested Repeat dashboard](../../assets/monitor/agent_loop_trajectory_dashboard.png)
-

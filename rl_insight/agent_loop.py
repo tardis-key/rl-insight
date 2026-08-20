@@ -26,9 +26,9 @@ def _agent_loop_leaf(sample: Any, session: Any, traj: Any) -> str:
     return f"sample={sample}/session={session}/traj={traj}"
 
 
-def agent_loop_lane_id(run_id: Any, sample: Any, session: Any, traj: Any) -> str:
+def agent_loop_lane_id(experiment_name: Any, sample: Any, session: Any, traj: Any) -> str:
     """Return the canonical lane ID for one agent-loop trajectory."""
-    return f"run={run_id}/{_agent_loop_sess_key(sample, session)}/traj={traj}"
+    return f"experiment={experiment_name}/{_agent_loop_sess_key(sample, session)}/traj={traj}"
 
 
 def _metric_gauge(name: str, value: float, **labels: Any) -> None:
@@ -52,28 +52,32 @@ def _agent_loop_reward(value: Any) -> float:
 
 def _publish_agent_loop_session(
     *,
-    run_id: Any,
+    experiment_name: Any,
     sample: Any,
     session: Any,
     trajectories: list[Any],
+    global_steps: Any = None,
     start_time_ns: int | None = None,
     end_time_ns: int | None = None,
 ) -> None:
     """Publish dashboard hierarchy gauges for one finalized agent session."""
-    run_id = str(run_id)
+    experiment_name = str(experiment_name)
     sample = str(sample)
     session = str(session)
+    global_steps = "" if global_steps is None else str(global_steps)
 
     _metric_gauge(
         "agent_loop_run_info",
         1.0,
-        run_id=run_id,
-        title=f"Run · {run_id}",
+        experiment_name=experiment_name,
+        global_steps=global_steps,
+        title=f"Experiment · {experiment_name}",
     )
     _metric_gauge(
         "agent_loop_sample_info",
         1.0,
-        run_id=run_id,
+        experiment_name=experiment_name,
+        global_steps=global_steps,
         sample=sample,
         title=f"Sample {sample}",
     )
@@ -81,7 +85,8 @@ def _publish_agent_loop_session(
     _metric_gauge(
         "agent_loop_session_info",
         1.0,
-        run_id=run_id,
+        experiment_name=experiment_name,
+        global_steps=global_steps,
         sample=sample,
         session=session,
         sess_key=sess_key,
@@ -97,7 +102,8 @@ def _publish_agent_loop_session(
         _metric_gauge(
             "agent_loop_traj_info",
             1.0,
-            run_id=run_id,
+            experiment_name=experiment_name,
+            global_steps=global_steps,
             sample=sample,
             session=session,
             traj=traj_id,
@@ -109,13 +115,15 @@ def _publish_agent_loop_session(
         _metric_gauge(
             "agent_loop_first_turn_unixtime",
             float(start_time_ns) / 1_000_000_000.0,
-            run_id=run_id,
+            experiment_name=experiment_name,
+            global_steps=global_steps,
         )
     if end_time_ns is not None:
         _metric_gauge(
             "agent_loop_last_turn_unixtime",
             float(end_time_ns) / 1_000_000_000.0,
-            run_id=run_id,
+            experiment_name=experiment_name,
+            global_steps=global_steps,
         )
 
 
@@ -138,10 +146,11 @@ class _AgentLoopSession:
         """Publish dashboard metadata and the session-level span."""
         identity = self.identity
         _publish_agent_loop_session(
-            run_id=identity["run_id"],
+            experiment_name=identity["experiment_name"],
             sample=identity["sample"],
             session=identity["session"],
             trajectories=trajectories,
+            global_steps=identity.get("global_steps"),
             start_time_ns=self.start_ns,
             end_time_ns=time.time_ns(),
         )
@@ -163,7 +172,7 @@ class _AgentLoopSession:
 
 def agent_loop_session(
     *,
-    run_id: Any,
+    experiment_name: Any,
     sample: Any,
     session: Any,
     traj: Any = 0,
@@ -172,17 +181,17 @@ def agent_loop_session(
     session_id: Any = None,
 ) -> _AgentLoopSession:
     """Create the shared identity and timestamp for one agent-loop session."""
-    run_id = str(run_id)
+    experiment_name = str(experiment_name)
     sample = str(sample)
     session = str(session)
     traj = str(traj)
     return _AgentLoopSession(
         identity={
-            "run_id": run_id,
+            "experiment_name": experiment_name,
             "sample": sample,
             "session": session,
             "traj": traj,
-            "state_lane_id": agent_loop_lane_id(run_id, sample, session, traj),
+            "state_lane_id": agent_loop_lane_id(experiment_name, sample, session, traj),
             "uid": "" if uid is None else str(uid),
             "global_steps": "" if global_steps is None else global_steps,
             "session_id": "" if session_id is None else str(session_id),

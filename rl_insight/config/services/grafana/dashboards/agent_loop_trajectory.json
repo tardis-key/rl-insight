@@ -37,7 +37,7 @@
                       "spec": {
                         "limit": 1000,
                         "metricsQueryType": "range",
-                        "query": "{span.state_lane_id =~ \"run=${run_id}/${session}/traj=.*\" && span.run_id = \"${run_id}\" && span.turn >= 0 && resource.service.name=\"rl_insight_monitor\"} | select(span.turn, span.finish_reason)",
+                        "query": "{span.state_lane_id =~ \"experiment=${experiment}/${session}/traj=.*\" && span.experiment_name =~ \"${experiment}\" && span.project =~ \"${project}\" && span.global_steps =~ \"${step}\" && span.turn >= 0 && resource.service.name=\"rl_insight_monitor\"} | select(span.turn, span.finish_reason)",
                         "queryType": "traceql",
                         "serviceMapUseNativeHistograms": false,
                         "spss": 100,
@@ -162,10 +162,12 @@
                         "type": true,
                         "tools": true,
                         "content": true,
-                        "run_id": true,
                         "sample_success_count": true,
                         "sample_total_trajs": true,
-                        "state_lane_id": true
+                        "state_lane_id": true,
+                        "experiment_name": true,
+                        "project": true,
+                        "global_steps": true
                       },
                       "includeByName": {},
                       "indexByName": {},
@@ -327,7 +329,7 @@
                       "spec": {
                         "limit": 100,
                         "metricsQueryType": "range",
-                        "query": "{span.monitor.trace_source = \"task\" && span.state_lane_id =~ \"run=${run_id}/${session}/traj=.*\" && span.run_id = \"${run_id}\"} | select(span.task_name, span.status, span.reward, span.accuracy, span.finished, span.reward_posted, span.error)",
+                        "query": "{span.monitor.trace_source = \"task\" && span.state_lane_id =~ \"experiment=${experiment}/${session}/traj=.*\" && span.experiment_name =~ \"${experiment}\" && span.project =~ \"${project}\" && span.global_steps =~ \"${step}\"} | select(span.task_name, span.status, span.reward, span.accuracy, span.finished, span.reward_posted, span.error)",
                         "queryType": "traceql",
                         "serviceMapUseNativeHistograms": false,
                         "spss": 100,
@@ -351,9 +353,11 @@
                         "traceService": true,
                         "traceName": true,
                         "service.name": true,
-                        "run_id": true,
                         "state_lane_id": true,
-                        "name": true
+                        "name": true,
+                        "experiment_name": true,
+                        "project": true,
+                        "global_steps": true
                       },
                       "includeByName": {},
                       "indexByName": {
@@ -495,7 +499,7 @@
                       "spec": {
                         "limit": 100,
                         "metricsQueryType": "range",
-                        "query": "{span.monitor.trace_source = \"session\" && span.state_lane_id =~ \"run=${run_id}/${session}/traj=.*\" && span.run_id = \"${run_id}\"} | select(span.runner_name, span.status, span.num_trajectories, span.reward_source, span.finished)",
+                        "query": "{span.monitor.trace_source = \"session\" && span.state_lane_id =~ \"experiment=${experiment}/${session}/traj=.*\" && span.experiment_name =~ \"${experiment}\" && span.project =~ \"${project}\" && span.global_steps =~ \"${step}\"} | select(span.runner_name, span.status, span.num_trajectories, span.reward_source, span.finished)",
                         "queryType": "traceql",
                         "serviceMapUseNativeHistograms": false,
                         "spss": 100,
@@ -519,9 +523,11 @@
                         "traceService": true,
                         "traceName": true,
                         "service.name": true,
-                        "run_id": true,
                         "state_lane_id": true,
-                        "name": true
+                        "name": true,
+                        "experiment_name": true,
+                        "project": true,
+                        "global_steps": true
                       },
                       "includeByName": {},
                       "indexByName": {
@@ -638,7 +644,7 @@
                       "spec": {
                         "limit": 100,
                         "metricsQueryType": "range",
-                        "query": "{span.monitor.trace_source = \"sandbox\" && span.state_lane_id =~ \"run=${run_id}/${session}/traj=.*\" && span.run_id = \"${run_id}\"} | select(span.provider, span.image, span.runtime_id, span.lifecycle, span.status, span.error)",
+                        "query": "{span.monitor.trace_source = \"sandbox\" && span.state_lane_id =~ \"experiment=${experiment}/${session}/traj=.*\" && span.experiment_name =~ \"${experiment}\" && span.project =~ \"${project}\" && span.global_steps =~ \"${step}\"} | select(span.provider, span.image, span.runtime_id, span.lifecycle, span.status, span.error)",
                         "queryType": "traceql",
                         "serviceMapUseNativeHistograms": false,
                         "spss": 100,
@@ -662,9 +668,11 @@
                         "traceService": true,
                         "traceName": true,
                         "service.name": true,
-                        "run_id": true,
                         "state_lane_id": true,
-                        "name": true
+                        "name": true,
+                        "experiment_name": true,
+                        "project": true,
+                        "global_steps": true
                       },
                       "includeByName": {},
                       "indexByName": {
@@ -779,7 +787,7 @@
                       "spec": {
                         "limit": 500,
                         "metricsQueryType": "range",
-                        "query": "{span.state_lane_id =~ \"run=${run_id}/${session}/traj=${traj}\" && span.run_id = \"${run_id}\" && span.turn >= 0 && resource.service.name=\"rl_insight_monitor\"} | select(span.turn, span.type, span.tools, span.finish_reason, span.content, span.prompt_tokens, span.completion_tokens)",
+                        "query": "{span.state_lane_id =~ \"experiment=${experiment}/${session}/traj=${traj}\" && span.experiment_name =~ \"${experiment}\" && span.project =~ \"${project}\" && span.global_steps =~ \"${step}\" && span.turn >= 0 && resource.service.name=\"rl_insight_monitor\"} | select(span.turn, span.type, span.tools, span.finish_reason, span.content, span.prompt_tokens, span.completion_tokens)",
                         "queryType": "traceql",
                         "serviceMapUseNativeHistograms": false,
                         "spss": 100,
@@ -803,10 +811,12 @@
                         "traceService": true,
                         "traceName": true,
                         "service.name": true,
-                        "run_id": true,
                         "state_lane_id": true,
                         "name": true,
-                        "duration": true
+                        "duration": true,
+                        "experiment_name": true,
+                        "project": true,
+                        "global_steps": true
                       },
                       "includeByName": {},
                       "indexByName": {
@@ -1137,14 +1147,14 @@
                                             "name": "${datasource}"
                                           },
                                           "spec": {
-                                            "query": "query_result(max_over_time(rl_insight_monitor_agent_loop_traj_info{run_id=~\"$run_id\",leaf=~\"$session/traj=.*\"}[$__range]))",
+                                            "query": "query_result(max_over_time(rl_insight_monitor_agent_loop_traj_info{project=~\"$project\", experiment_name=~\"$experiment\", global_steps=~\"$step\",leaf=~\"$session/traj=.*\"}[$__range]))",
                                             "refId": "StandardVariableQuery"
                                           }
                                         },
                                         "regex": "/title=\"(?<text>[^\"]+)\".*traj=\"(?<value>[^\"]+)\"/",
                                         "regexApplyTo": "value",
                                         "sort": "alphabeticalAsc",
-                                        "definition": "query_result(max_over_time(rl_insight_monitor_agent_loop_traj_info{run_id=~\"$run_id\",leaf=~\"$session/traj=.*\"}[$__range]))",
+                                        "definition": "query_result(max_over_time(rl_insight_monitor_agent_loop_traj_info{project=~\"$project\", experiment_name=~\"$experiment\", global_steps=~\"$step\",leaf=~\"$session/traj=.*\"}[$__range]))",
                                         "options": [],
                                         "allowCustomValue": false,
                                         "current": {
@@ -1183,14 +1193,14 @@
                                   "name": "${datasource}"
                                 },
                                 "spec": {
-                                  "query": "query_result(max_over_time(rl_insight_monitor_agent_loop_session_info{run_id=~\"$run_id\",sample=~\"$sample\"}[$__range]))",
+                                  "query": "query_result(max_over_time(rl_insight_monitor_agent_loop_session_info{project=~\"$project\", experiment_name=~\"$experiment\", global_steps=~\"$step\",sample=~\"$sample\"}[$__range]))",
                                   "refId": "StandardVariableQuery"
                                 }
                               },
                               "regex": "/sess_key=\"(?<value>[^\"]+)\".*title=\"(?<text>[^\"]+)\"/",
                               "regexApplyTo": "value",
                               "sort": "alphabeticalAsc",
-                              "definition": "query_result(max_over_time(rl_insight_monitor_agent_loop_session_info{run_id=~\"$run_id\",sample=~\"$sample\"}[$__range]))",
+                              "definition": "query_result(max_over_time(rl_insight_monitor_agent_loop_session_info{project=~\"$project\", experiment_name=~\"$experiment\", global_steps=~\"$step\",sample=~\"$sample\"}[$__range]))",
                               "options": [],
                               "allowCustomValue": false,
                               "current": {
@@ -1242,14 +1252,14 @@
                         "name": "${datasource}"
                       },
                       "spec": {
-                        "query": "query_result(max_over_time(rl_insight_monitor_agent_loop_sample_info{run_id=~\"$run_id\"}[$__range]))",
+                        "query": "query_result(max_over_time(rl_insight_monitor_agent_loop_sample_info{project=~\"$project\", experiment_name=~\"$experiment\", global_steps=~\"$step\"}[$__range]))",
                         "refId": "StandardVariableQuery"
                       }
                     },
                     "regex": "/sample=\"(?<value>[^\"]+)\".*title=\"(?<text>[^\"]+)\"/",
                     "regexApplyTo": "value",
                     "sort": "numericalAsc",
-                    "definition": "query_result(max_over_time(rl_insight_monitor_agent_loop_sample_info{run_id=~\"$run_id\"}[$__range]))",
+                    "definition": "query_result(max_over_time(rl_insight_monitor_agent_loop_sample_info{project=~\"$project\", experiment_name=~\"$experiment\", global_steps=~\"$step\"}[$__range]))",
                     "options": [],
                     "allowCustomValue": false,
                     "current": {
@@ -1319,8 +1329,8 @@
       {
         "kind": "QueryVariable",
         "spec": {
-          "name": "run_id",
-          "label": "run_id",
+          "name": "project",
+          "label": "project",
           "hide": "",
           "refresh": "onTimeRangeChanged",
           "skipUrlSync": true,
@@ -1333,22 +1343,95 @@
               "name": "${datasource}"
             },
             "spec": {
-              "query": "query_result(max_over_time(rl_insight_monitor_agent_loop_run_info[$__range]))",
+              "query": "label_values(rl_insight_monitor_agent_loop_run_info, project)",
               "refId": "StandardVariableQuery"
             }
           },
-          "regex": "/run_id=\"(?<value>[^\"]+)\"/",
+          "regex": "",
           "regexApplyTo": "value",
-          "sort": "alphabeticalDesc",
-          "definition": "query_result(max_over_time(rl_insight_monitor_agent_loop_run_info[$__range]))",
+          "sort": "alphabeticalAsc",
+          "definition": "label_values(rl_insight_monitor_agent_loop_run_info, project)",
           "options": [],
           "allowCustomValue": false,
           "current": {
-            "text": "export-1787037718-c5c2457d",
-            "value": "export-1787037718-c5c2457d"
+            "text": "All",
+            "value": "$__all"
           },
           "multi": false,
-          "includeAll": false
+          "includeAll": true,
+          "allValue": ".*"
+        }
+      },
+      {
+        "kind": "QueryVariable",
+        "spec": {
+          "name": "experiment",
+          "label": "experiment",
+          "hide": "",
+          "refresh": "onTimeRangeChanged",
+          "skipUrlSync": true,
+          "description": "Section-scoped Repeat variable (needs dashboardSectionVariables).",
+          "query": {
+            "kind": "DataQuery",
+            "group": "prometheus",
+            "version": "v0",
+            "datasource": {
+              "name": "${datasource}"
+            },
+            "spec": {
+              "query": "label_values(rl_insight_monitor_agent_loop_run_info{project=~\"$project\"}, experiment_name)",
+              "refId": "StandardVariableQuery"
+            }
+          },
+          "regex": "",
+          "regexApplyTo": "value",
+          "sort": "alphabeticalAsc",
+          "definition": "label_values(rl_insight_monitor_agent_loop_run_info{project=~\"$project\"}, experiment_name)",
+          "options": [],
+          "allowCustomValue": false,
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          },
+          "multi": false,
+          "includeAll": true,
+          "allValue": ".*"
+        }
+      },
+      {
+        "kind": "QueryVariable",
+        "spec": {
+          "name": "step",
+          "label": "step",
+          "hide": "",
+          "refresh": "onTimeRangeChanged",
+          "skipUrlSync": true,
+          "description": "Section-scoped Repeat variable (needs dashboardSectionVariables).",
+          "query": {
+            "kind": "DataQuery",
+            "group": "prometheus",
+            "version": "v0",
+            "datasource": {
+              "name": "${datasource}"
+            },
+            "spec": {
+              "query": "label_values(rl_insight_monitor_agent_loop_run_info{project=~\"$project\", experiment_name=~\"$experiment\"}, global_steps)",
+              "refId": "StandardVariableQuery"
+            }
+          },
+          "regex": "",
+          "regexApplyTo": "value",
+          "sort": "alphabeticalAsc",
+          "definition": "label_values(rl_insight_monitor_agent_loop_run_info{project=~\"$project\", experiment_name=~\"$experiment\"}, global_steps)",
+          "options": [],
+          "allowCustomValue": false,
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          },
+          "multi": false,
+          "includeAll": true,
+          "allValue": ".*"
         }
       },
       {
@@ -1368,14 +1451,14 @@
               "name": "${datasource}"
             },
             "spec": {
-              "query": "query_result(clamp_max(count(max_over_time(rl_insight_monitor_agent_loop_run_info[$__range])), 1) or vector(0))",
+              "query": "query_result(clamp_max(count(max_over_time(rl_insight_monitor_agent_loop_run_info{project=~\"$project\", experiment_name=~\"$experiment\", global_steps=~\"$step\"}[$__range])), 1) or vector(0))",
               "refId": "StandardVariableQuery"
             }
           },
           "regex": "/\\s(?<value>[01])(?:\\s|$)/",
           "regexApplyTo": "value",
           "sort": "alphabeticalAsc",
-          "definition": "query_result(clamp_max(count(max_over_time(rl_insight_monitor_agent_loop_run_info[$__range])), 1) or vector(0))",
+          "definition": "query_result(clamp_max(count(max_over_time(rl_insight_monitor_agent_loop_run_info{project=~\"$project\", experiment_name=~\"$experiment\", global_steps=~\"$step\"}[$__range])), 1) or vector(0))",
           "options": [],
           "allowCustomValue": false,
           "current": {
