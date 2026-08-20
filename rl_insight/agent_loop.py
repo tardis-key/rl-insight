@@ -1,16 +1,19 @@
-"""Agent-loop dashboard protocol helpers.
+"""Agent-loop dashboard protocol and session helpers.
 
-This module owns the metric names, lane IDs, and hierarchy labels consumed by
-the Agent Loop Trajectory dashboard. Training frameworks should adapt their
-domain objects to these helpers instead of reimplementing the protocol.
+This module owns the metric names, lane IDs, session identity, and hierarchy
+labels consumed by the Agent Loop Trajectory dashboard. Training frameworks
+should adapt their domain objects to :func:`agent_loop_session` instead of
+reimplementing the protocol.
 """
 
 from __future__ import annotations
 
 import logging
+import time
+from dataclasses import dataclass
 from typing import Any
 
-from .api import metric_gauge
+from .api import metric_gauge, trace_span
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +50,7 @@ def _agent_loop_reward(value: Any) -> float:
         return 0.0
 
 
-def publish_agent_loop_session(
+def _publish_agent_loop_session(
     *,
     run_id: Any,
     sample: Any,
@@ -114,3 +117,75 @@ def publish_agent_loop_session(
             float(end_time_ns) / 1_000_000_000.0,
             run_id=run_id,
         )
+
+
+@dataclass(frozen=True)
+class _AgentLoopSession:
+    """Completed-span state for one agent-loop session."""
+
+    identity: dict[str, Any]
+    start_ns: int
+
+    def finish(
+        self,
+        *,
+        trajectories: list[Any],
+        status: str,
+        runner_name: str | None = None,
+        reward_source: str | None = None,
+        finished: bool | None = None,
+    ) -> None:
+        """Publish dashboard metadata and the session-level span."""
+        identity = self.identity
+        _publish_agent_loop_session(
+            run_id=identity["run_id"],
+            sample=identity["sample"],
+            session=identity["session"],
+            trajectories=trajectories,
+            start_time_ns=self.start_ns,
+            end_time_ns=time.time_ns(),
+        )
+        trace_span(
+            name="agent_session",
+            start_time_ns=self.start_ns,
+            end_time_ns=time.time_ns(),
+            attributes={
+                **identity,
+                "monitor.trace_source": "session",
+                "runner_name": runner_name or "",
+                "status": status,
+                "num_trajectories": len(trajectories),
+                "reward_source": reward_source or "",
+                "finished": finished if finished is not None else "",
+            },
+        )
+
+
+def agent_loop_session(
+    *,
+    run_id: Any,
+    sample: Any,
+    session: Any,
+    traj: Any = 0,
+    uid: Any = None,
+    global_steps: Any = None,
+    session_id: Any = None,
+) -> _AgentLoopSession:
+    """Create the shared identity and timestamp for one agent-loop session."""
+    run_id = str(run_id)
+    sample = str(sample)
+    session = str(session)
+    traj = str(traj)
+    return _AgentLoopSession(
+        identity={
+            "run_id": run_id,
+            "sample": sample,
+            "session": session,
+            "traj": traj,
+            "state_lane_id": agent_loop_lane_id(run_id, sample, session, traj),
+            "uid": "" if uid is None else str(uid),
+            "global_steps": "" if global_steps is None else global_steps,
+            "session_id": "" if session_id is None else str(session_id),
+        },
+        start_ns=time.time_ns(),
+    )
