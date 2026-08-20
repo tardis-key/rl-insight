@@ -303,6 +303,174 @@
           }
         }
       },
+      "agent-loop-task-summary": {
+        "kind": "Panel",
+        "spec": {
+          "id": 328,
+          "title": "Task Summary",
+          "description": "One row per task episode in the current session.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "tempo",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "tempo"
+                      },
+                      "spec": {
+                        "limit": 100,
+                        "metricsQueryType": "range",
+                        "query": "{span.monitor.trace_source = \"task\" && span.run_id = \"${run_id}\" && span.sample = \"${sample}\" && span.session = \"${session}\"} | select(span.task_name, span.status, span.reward, span.accuracy, span.finished, span.reward_posted, span.error)",
+                        "queryType": "traceql",
+                        "serviceMapUseNativeHistograms": false,
+                        "spss": 100,
+                        "tableType": "spans"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "organize",
+                  "spec": {
+                    "options": {
+                      "excludeByName": {
+                        "traceIdHidden": true,
+                        "spanID": true,
+                        "traceService": true,
+                        "traceName": true,
+                        "service.name": true,
+                        "run_id": true,
+                        "state_lane_id": true,
+                        "name": true
+                      },
+                      "includeByName": {},
+                      "indexByName": {
+                        "time": 0,
+                        "task_name": 1,
+                        "status": 2,
+                        "reward": 3,
+                        "accuracy": 4,
+                        "finished": 5,
+                        "reward_posted": 6,
+                        "error": 7,
+                        "duration": 8
+                      },
+                      "renameByName": {
+                        "time": "Start",
+                        "task_name": "Task",
+                        "status": "Status",
+                        "reward": "Reward",
+                        "accuracy": "Accuracy",
+                        "finished": "Finished",
+                        "reward_posted": "Reward posted",
+                        "error": "Error",
+                        "duration": "Duration (ms)"
+                      }
+                    }
+                  }
+                },
+                {
+                  "kind": "Transformation",
+                  "group": "convertFieldType",
+                  "spec": {
+                    "options": {
+                      "conversions": [
+                        {
+                          "destinationType": "number",
+                          "targetField": "reward"
+                        },
+                        {
+                          "destinationType": "number",
+                          "targetField": "accuracy"
+                        },
+                        {
+                          "destinationType": "number",
+                          "targetField": "duration"
+                        }
+                      ],
+                      "fields": {}
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "13.0.2",
+            "spec": {
+              "options": {
+                "cellHeight": "sm",
+                "footer": {
+                  "countRows": false,
+                  "enablePagination": false,
+                  "fields": "",
+                  "reducer": [
+                    "sum"
+                  ],
+                  "show": false
+                },
+                "showHeader": true
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "align": "auto",
+                    "cellOptions": {
+                      "type": "auto"
+                    },
+                    "inspect": false
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "thresholds"
+                  }
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "Error"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.width",
+                        "value": 360
+                      },
+                      {
+                        "id": "custom.inspect",
+                        "value": true
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
       "agent-loop-repeat-details": {
         "kind": "Panel",
         "spec": {
@@ -532,6 +700,34 @@
                                                       "element": {
                                                         "kind": "ElementReference",
                                                         "name": "agent-loop-repeat-overview"
+                                                      }
+                                                    }
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "kind": "RowsLayoutRow",
+                                          "spec": {
+                                            "title": "Task Summary",
+                                            "collapse": false,
+                                            "hideHeader": true,
+                                            "layout": {
+                                              "kind": "GridLayout",
+                                              "spec": {
+                                                "items": [
+                                                  {
+                                                    "kind": "GridLayoutItem",
+                                                    "spec": {
+                                                      "x": 0,
+                                                      "y": 0,
+                                                      "width": 24,
+                                                      "height": 6,
+                                                      "element": {
+                                                        "kind": "ElementReference",
+                                                        "name": "agent-loop-task-summary"
                                                       }
                                                     }
                                                   }
