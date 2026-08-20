@@ -25,11 +25,13 @@ from typing import Any
 
 
 _EXPORTS = {
+    "agent_loop_lane_id": ".agent_loop",
     "finish": ".api",
     "init": ".api",
     "metric_count": ".api",
     "metric_gauge": ".api",
     "metric_histogram": ".api",
+    "publish_agent_loop_session": ".agent_loop",
     "trace_op": ".api",
     "trace_span": ".api",
     "trace_state": ".api",
