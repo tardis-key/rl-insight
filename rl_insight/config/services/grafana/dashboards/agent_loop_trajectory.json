@@ -327,7 +327,7 @@
                       "spec": {
                         "limit": 100,
                         "metricsQueryType": "range",
-                        "query": "{span.monitor.trace_source = \"task\" && span.run_id = \"${run_id}\" && span.sample = \"${sample}\" && span.session = \"${session}\"} | select(span.task_name, span.status, span.reward, span.accuracy, span.finished, span.reward_posted, span.error)",
+                        "query": "{span.monitor.trace_source = \"task\" && span.state_lane_id =~ \"run=${run_id}/${session}/traj=.*\" && span.run_id = \"${run_id}\"} | select(span.task_name, span.status, span.reward, span.accuracy, span.finished, span.reward_posted, span.error)",
                         "queryType": "traceql",
                         "serviceMapUseNativeHistograms": false,
                         "spss": 100,
