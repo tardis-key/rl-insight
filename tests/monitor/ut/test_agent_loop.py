@@ -102,7 +102,7 @@ def test_agent_loop_session_should_build_identity_and_finish_span(
         "traj": "0",
         "state_lane_id": "experiment=experiment-a/sample=1/session=0/traj=0",
         "uid": "uid-a",
-        "global_steps": 7,
+        "global_steps": "7",
         "session_id": "session-a",
     }
 

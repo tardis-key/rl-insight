@@ -193,7 +193,7 @@ def agent_loop_session(
             "traj": traj,
             "state_lane_id": agent_loop_lane_id(experiment_name, sample, session, traj),
             "uid": "" if uid is None else str(uid),
-            "global_steps": "" if global_steps is None else global_steps,
+            "global_steps": "" if global_steps is None else str(global_steps),
             "session_id": "" if session_id is None else str(session_id),
         },
         start_ns=time.time_ns(),
