@@ -1279,13 +1279,6 @@
     "links": [],
     "liveNow": false,
     "preload": false,
-    "tags": [
-      "rl-insight",
-      "agent-loop",
-      "experimental",
-      "repeat-poc",
-      "titles-from-info"
-    ],
     "timeSettings": {
       "timezone": "browser",
       "from": "now-2h",
