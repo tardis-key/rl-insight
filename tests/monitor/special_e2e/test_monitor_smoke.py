@@ -22,6 +22,7 @@ import sys
 import time
 import uuid
 from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from typing import Any, cast
 
 import pytest
@@ -29,6 +30,8 @@ import ray
 import requests
 
 import rl_insight as insight
+from rl_insight import agent_loop_session, trace_span
+from rl_insight.agent_loop import agent_loop_lane_id
 from rl_insight.client.ray_monitor_client import _current_job_actor_name
 from rl_insight.utils.constants import MonitorRayActor
 
@@ -41,6 +44,13 @@ SERVER_URL = os.environ.get("RL_INSIGHT_SERVER_URL", "http://127.0.0.1:18080")
 TEMPO_QUERY_URL = os.environ.get("RL_INSIGHT_TEMPO_QUERY_URL", "http://127.0.0.1:3200")
 READY_TIMEOUT_SECONDS = 60
 TEST_RUN_ID = uuid.uuid4().hex
+
+
+@dataclass(frozen=True)
+class _SmokeTrajectory:
+    chain_id: int
+    reward_score: float
+    num_turns: int
 
 
 def _wait_for_json(
@@ -189,3 +199,133 @@ def test_monitor_trace_state_should_be_queryable_when_interval_is_reported(
 
     assert trace_name in serialized_trace
     assert TEST_RUN_ID in serialized_trace
+
+
+def test_agent_loop_dashboard_should_query_generated_protocol_data(
+    monitor_stack: dict[str, str],
+) -> None:
+    """Generate one Agent Loop run and verify Tempo and Prometheus queryability."""
+    project = "rl-insight-e2e"
+    experiment_name = f"monitor-smoke-agent-loop-{TEST_RUN_ID}"
+    sample = "0"
+    session_index = "0"
+    session_id = f"session-{TEST_RUN_ID}"
+    global_steps = 1
+
+    session = agent_loop_session(
+        project=project,
+        experiment_name=experiment_name,
+        sample=sample,
+        session=session_index,
+        traj=0,
+        uid=f"uid-{TEST_RUN_ID}",
+        global_steps=global_steps,
+        session_id=session_id,
+    )
+    identity = session.identity
+
+    trace_span(
+        name="agent_task",
+        start_time_ns=time.time_ns(),
+        end_time_ns=time.time_ns(),
+        attributes={
+            **identity,
+            "monitor.trace_source": "task",
+            "task_name": "monitor-smoke",
+            "image_ref": "python:3.12",
+            "prompt_hash": TEST_RUN_ID,
+            "status": "success",
+            "reward": 1.0,
+            "accuracy": 1.0,
+            "finished": True,
+            "reward_posted": True,
+            "error": "",
+        },
+    )
+
+    trace_span(
+        name="gateway_generation",
+        start_time_ns=time.time_ns(),
+        end_time_ns=time.time_ns(),
+        attributes={
+            **identity,
+            "monitor.trace_source": "gateway",
+            "state_lane_id": agent_loop_lane_id(
+                experiment_name,
+                sample,
+                session_index,
+                0,
+            ),
+            "traj": 0,
+            "chain_id": 1,
+            "turn": 1,
+            "type": "llm",
+            "tools": "",
+            "content": "monitor smoke",
+            "prompt_tokens": 16,
+            "completion_tokens": 4,
+            "finish_reason": "stop",
+            "status": "success",
+            "error": "",
+        },
+    )
+
+    trace_span(
+        name="agent_sandbox",
+        start_time_ns=time.time_ns(),
+        end_time_ns=time.time_ns(),
+        attributes={
+            **identity,
+            "monitor.trace_source": "sandbox",
+            "provider": "docker",
+            "image": "python:3.12",
+            "runtime_id": session_id,
+            "lifecycle": "start",
+            "status": "success",
+            "error": "",
+        },
+    )
+
+    session.finish(
+        trajectories=[
+            _SmokeTrajectory(
+                chain_id=1,
+                reward_score=1.0,
+                num_turns=1,
+            )
+        ],
+        status="success",
+        runner_name="monitor-smoke",
+        reward_source="protocol-test",
+        finished=True,
+    )
+
+    search = _wait_for_json(
+        f"{monitor_stack['tempo']}/api/search",
+        params={
+            "q": (
+                f'{{ name = "gateway_generation" && '
+                f'span.experiment_name = "{experiment_name}" }}'
+            )
+        },
+        ready=lambda data: bool(data.get("traces")),
+    )
+    trace_id = search["traces"][0]["traceID"]
+    trace = _wait_for_json(f"{monitor_stack['tempo']}/api/traces/{trace_id}")
+    serialized_trace = json.dumps(trace)
+    assert "gateway_generation" in serialized_trace
+    assert experiment_name in serialized_trace
+
+    metric_payload = _wait_for_json(
+        f"{monitor_stack['prometheus']}/api/v1/query",
+        params={
+            "query": (
+                "rl_insight_monitor_agent_loop_run_info"
+                f'{{project="{project}",experiment_name="{experiment_name}"}}'
+            )
+        },
+        ready=lambda data: bool(data.get("data", {}).get("result")),
+    )
+    result = metric_payload["data"]["result"][0]
+    assert result["metric"]["project"] == project
+    assert result["metric"]["experiment_name"] == experiment_name

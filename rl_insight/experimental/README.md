@@ -1,6 +1,6 @@
 # Trace Interface Developer Guide
 
-This directory contains the minimal integration guide for RL-Insight tracing and `generate_trace_data.py`, an end-to-end validation script.
+This directory contains the minimal integration guide for RL-Insight tracing. The managed-stack smoke test now owns end-to-end trace and Agent Loop validation.
 
 ## Choose the right interface
 
@@ -186,13 +186,10 @@ Group Steps by lane and sort them numerically by `step_index`. The `state_lane_i
 With RL-Insight, Tempo, and Grafana running:
 
 ```bash
-python rl_insight/experimental/generate_trace_data.py \
-  --server-url http://127.0.0.1:18080
+pytest tests/monitor/special_e2e/test_monitor_smoke.py
 ```
 
-The script validates direct `trace_span`, synchronous `trace_op`, and asynchronous `trace_op` reporting through both Tempo and Grafana's Tempo datasource. Decorator-generated Agent Steps are interface tests only; production Agents should follow the selection table above. The same process also publishes an Agent Loop fixture for the dashboard in the next section (`rl_insight_monitor_agent_loop_*_info` / turn unixtime gauges via the metrics HTTP port, plus Tempo turn spans). Leave the process running after verify so Prometheus can keep scraping those gauges.
-
-Useful options are `--tempo-url`, `--grafana-url`, `--step-duration`, and `--timeout`. The script checks Span count, names, required attributes, and uniqueness of `session_id/step_index`, then prints the generated `session_id` values and Grafana Explore URL.
+The smoke test validates the generic trace data path and generates one protocol-compliant Agent Loop run. It checks Tempo and Prometheus queryability and keeps the Agent Loop fixture aligned with the dashboard contract.
 
 ## Agent Loop trajectory visualization
 
@@ -209,6 +206,6 @@ Tempo       turn spans keyed by `state_lane_id` (and `run_id`, …)
 
 `$run_id` / `$has_agent_loop_data` select runs whose turn activity overlaps the dashboard time range (`first_turn_unixtime` / `last_turn_unixtime` vs `$__from` / `$__to`). Nested `$sample` / `$session` / `$traj` enumerate children under the selected parent.
 
-**Effect** (example after `generate_trace_data.py` verify; Grafana UID `a1b2c3d4-e5f6-7890-abcd-ef1234567890`):
+**Effect** (example after the managed-stack smoke test; Grafana UID `a1b2c3d4-e5f6-7890-abcd-ef1234567890`):
 
 ![Agent Loop nested Repeat dashboard](https://raw.githubusercontent.com/verl-project/rl-insight/main/assets/monitor/agent_loop_trajectory_dashboard.png)

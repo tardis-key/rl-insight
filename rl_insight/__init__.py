@@ -51,6 +51,7 @@ def _get_version() -> str:
 __version__ = _get_version()
 
 _EXPORTS = {
+    "agent_loop_session": ".agent_loop",
     "finish": ".api",
     "init": ".api",
     "metric_count": ".api",

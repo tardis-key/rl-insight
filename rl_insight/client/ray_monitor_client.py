@@ -23,7 +23,7 @@ import ray
 from omegaconf import DictConfig
 
 from ..collector.ray_monitor_hub import MonitorHubActor
-from ..utils.constants import MonitorRayActor
+from ..utils.constants import MonitorEnv, MonitorRayActor
 from .base import MonitorClient
 
 logger = logging.getLogger(__name__)
@@ -74,6 +74,11 @@ def get_or_create_monitor_hub(conf: DictConfig) -> Any:
         "name": actor_name,
         "namespace": namespace,
     }
+    server_url = str(conf.server.url).strip()
+    if server_url:
+        actor_options["runtime_env"] = {
+            "env_vars": {MonitorEnv.SERVER_URL: server_url},
+        }
 
     try:
         actor_cls = cast(Any, MonitorHubActor)
