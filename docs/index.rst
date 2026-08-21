@@ -20,7 +20,6 @@ For offline Recipe utilities, see the
 
    Quick Start <monitor/quick_start>
    Agent Loop Protocol <monitor/agent_loop_protocol>
-   Agent Loop RFC <monitor/agent_loop_rfc>
    Server Installation <monitor/server_installation>
    Hardware Monitoring <monitor/hardware/index>
 
