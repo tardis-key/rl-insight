@@ -29,14 +29,9 @@ from typing import Any
 def _get_version() -> str:
     """Resolve the package version.
 
-    Tries installed metadata first, then falls back to reading ``pyproject.toml``
-    so that running from a source checkout works without an editable install.
+    Reads ``pyproject.toml`` first so a source checkout reports the branch's
+    actual version, then falls back to installed metadata.
     """
-    try:
-        return _pkg_version("rl-insight")
-    except PackageNotFoundError:
-        pass
-
     pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
     if pyproject.is_file():
         try:
@@ -45,6 +40,11 @@ def _get_version() -> str:
                     return line.split("=")[-1].strip().strip('"')
         except OSError:
             pass
+
+    try:
+        return _pkg_version("rl-insight")
+    except PackageNotFoundError:
+        pass
     return "unknown"
 
 
