@@ -1,6 +1,7 @@
 name: Special E2e Monitor Smoke Test
 
 on:
+  # Temporary branch marker used to validate the monitor smoke-test workflow.
   push:
     branches:
       - main
