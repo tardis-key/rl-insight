@@ -20,6 +20,7 @@ dependencies = [
   "prometheus_client",
   "opentelemetry-sdk",
   "opentelemetry-exporter-otlp-proto-http",
+  "pyarrow",
   "pyyaml",
 ]
 

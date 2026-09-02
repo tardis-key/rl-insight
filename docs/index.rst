@@ -21,6 +21,7 @@ For offline Recipe utilities, see the
    Quick Start <monitor/quick_start>
    Agent Loop Protocol <monitor/agent_loop_protocol>
    Server Installation <monitor/server_installation>
+   Data Inspection <monitor/data_inspection>
    Hardware Monitoring <monitor/hardware/index>
 
 .. toctree::
