@@ -14,17 +14,34 @@
 
 from __future__ import annotations
 
+import unicodedata
 from datetime import datetime, timezone
+
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from rl_insight import cli
 from rl_insight.data_inspection import (
     ExperimentSummary,
     SourceRange,
+    _inspect_tempo,
     _parse_openmetrics,
+    _prometheus_sample_count,
     _tempo_pairs,
     format_summaries,
     inspect_data_directory,
 )
+
+
+def _display_width(text: str) -> int:
+    return sum(
+        0
+        if unicodedata.combining(character)
+        else 2
+        if unicodedata.east_asian_width(character) in {"F", "W"}
+        else 1
+        for character in text
+    )
 
 
 def test_parse_openmetrics_extracts_project_experiment_and_timestamp() -> None:
@@ -65,8 +82,89 @@ def test_tempo_pairs_extracts_nested_span_attributes() -> None:
     assert _tempo_pairs(row) == {("proj-1", "exp-1")}
 
 
+def test_inspect_tempo_reads_scalar_attribute_values(tmp_path) -> None:
+    tempo_dir = tmp_path / "tempo" / "traces" / "single-tenant" / "test"
+    tempo_dir.mkdir(parents=True)
+    attribute_type = pa.struct(
+        [
+            pa.field("Key", pa.string()),
+            pa.field("Value", pa.string()),
+        ]
+    )
+    resource_spans_type = pa.struct(
+        [
+            pa.field(
+                "Resource",
+                pa.struct([pa.field("Attrs", pa.list_(attribute_type))]),
+            )
+        ]
+    )
+    table = pa.table(
+        {
+            "StartTimeUnixNano": pa.array(
+                [1788319580000000000], type=pa.uint64()
+            ),
+            "EndTimeUnixNano": pa.array(
+                [1788319640000000000], type=pa.uint64()
+            ),
+            "rs": pa.array(
+                [
+                    [
+                        {
+                            "Resource": {
+                                "Attrs": [
+                                    {"Key": "project", "Value": "proj-1"},
+                                    {
+                                        "Key": "experiment_name",
+                                        "Value": "exp-1",
+                                    },
+                                ]
+                            }
+                        }
+                    ]
+                ],
+                type=pa.list_(resource_spans_type),
+            ),
+        }
+    )
+    pq.write_table(table, tempo_dir / "data.parquet")
+
+    ranges = _inspect_tempo(tmp_path)
+
+    assert ranges == {
+        ("proj-1", "exp-1"): SourceRange(
+            start=datetime(2026, 9, 2, 3, 26, 20, tzinfo=timezone.utc),
+            end=datetime(2026, 9, 2, 3, 27, 20, tzinfo=timezone.utc),
+        )
+    }
+
+
+def test_prometheus_sample_count_sums_block_metadata(tmp_path) -> None:
+    block_a = tmp_path / "block-a"
+    block_b = tmp_path / "block-b"
+    block_a.mkdir()
+    block_b.mkdir()
+    (block_a / "meta.json").write_text(
+        '{"stats":{"numSamples":100}}', encoding="utf-8"
+    )
+    (block_b / "meta.json").write_text(
+        '{"stats":{"numSamples":23}}', encoding="utf-8"
+    )
+
+    assert _prometheus_sample_count(tmp_path) == 123
+
+
 def test_inspect_data_directory_returns_empty_for_empty_directory(tmp_path) -> None:
     assert inspect_data_directory(tmp_path) == []
+
+
+def test_data_inspect_reports_no_data_without_table(tmp_path, capsys) -> None:
+    args = cli._build_parser().parse_args(
+        ["data", "inspect", "--log-dir", str(tmp_path)]
+    )
+
+    assert cli._handle_data_inspect(args) == 0
+    assert capsys.readouterr().out.strip() == "Data not found."
 
 
 def test_parser_accepts_log_dir(tmp_path) -> None:
@@ -75,7 +173,6 @@ def test_parser_accepts_log_dir(tmp_path) -> None:
     )
 
     assert args.log_dir == tmp_path
-    assert args.format == "table"
     assert args.func.__name__ == "_handle_data_inspect"
 
 
@@ -86,7 +183,6 @@ def test_format_summaries_renders_project_experiment_and_ranges() -> None:
         prometheus=SourceRange(
             start=datetime(2026, 9, 2, 3, 26, 20, tzinfo=timezone.utc),
             end=datetime(2026, 9, 2, 3, 27, 20, tzinfo=timezone.utc),
-            count=2,
         ),
         tempo=None,
     )
@@ -106,11 +202,78 @@ def test_format_summaries_renders_full_dates_when_range_crosses_days() -> None:
         prometheus=SourceRange(
             start=datetime(2026, 9, 2, 2, 26, tzinfo=timezone.utc),
             end=datetime(2026, 9, 3, 5, 12, tzinfo=timezone.utc),
-            count=1,
         ),
         tempo=None,
     )
 
     output = format_summaries([summary])
 
-    assert "2026-09-02 02:26～2026-09-03 05:12" in output
+    lines = output.splitlines()
+    assert any("2026-09-02 02:26～" in line for line in lines)
+    assert any("2026-09-03 05:12" in line for line in lines)
+
+
+def test_format_summaries_keeps_table_aligned_with_multiline_ranges() -> None:
+    summary = ExperimentSummary(
+        project="proj-1",
+        experiment="exp-1",
+        prometheus=SourceRange(
+            start=datetime(2026, 9, 2, 2, 26, tzinfo=timezone.utc),
+            end=datetime(2026, 9, 3, 5, 12, tzinfo=timezone.utc),
+        ),
+        tempo=SourceRange(
+            start=datetime(2026, 9, 2, 3, 26, tzinfo=timezone.utc),
+            end=datetime(2026, 9, 2, 3, 27, tzinfo=timezone.utc),
+        ),
+    )
+
+    output = format_summaries([summary])
+    separator_indexes = {
+        tuple(
+            _display_width(line[:index])
+            for index, char in enumerate(line)
+            if char == "|"
+        )
+        for line in output.splitlines()
+        if line.startswith("|")
+    }
+
+    assert len(separator_indexes) == 1
+
+
+def test_format_summaries_merges_project_cells_and_separates_rows() -> None:
+    summaries = [
+        ExperimentSummary(
+            project="proj-1",
+            experiment="exp-1",
+            prometheus=SourceRange(
+                start=datetime(2026, 9, 2, 3, 26, tzinfo=timezone.utc),
+                end=datetime(2026, 9, 2, 3, 27, tzinfo=timezone.utc),
+            ),
+            tempo=None,
+        ),
+        ExperimentSummary(
+            project="proj-1",
+            experiment="exp-2",
+            prometheus=SourceRange(
+                start=datetime(2026, 9, 2, 3, 28, tzinfo=timezone.utc),
+                end=datetime(2026, 9, 2, 3, 29, tzinfo=timezone.utc),
+            ),
+            tempo=None,
+        ),
+        ExperimentSummary(
+            project="proj-2",
+            experiment="exp-1",
+            prometheus=SourceRange(
+                start=datetime(2026, 9, 2, 3, 30, tzinfo=timezone.utc),
+                end=datetime(2026, 9, 2, 3, 31, tzinfo=timezone.utc),
+            ),
+            tempo=None,
+        ),
+    ]
+
+    output = format_summaries(summaries)
+
+    assert output.count("proj-1") == 1
+    assert output.count("proj-2") == 1
+    assert any(line.startswith("|         +") for line in output.splitlines())

@@ -160,22 +160,12 @@ def _add_data_parser(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         help="Path to promtool; auto-detected when omitted.",
     )
-    inspect.add_argument(
-        "--format",
-        choices=["table", "json"],
-        default="table",
-        help="Output format.",
-    )
     inspect.set_defaults(func=_handle_data_inspect)
 
 
 def _handle_data_inspect(args: argparse.Namespace) -> int:
     """Inspect persisted data and print the result."""
-    from .data_inspection import (
-        format_summaries,
-        inspect_data_directory,
-        summaries_to_json,
-    )
+    from .data_inspection import format_summaries, inspect_data_directory
 
     data_dir = _resolve_data_dir(args)
     try:
@@ -184,10 +174,11 @@ def _handle_data_inspect(args: argparse.Namespace) -> int:
         print(f"Data inspection failed: {exc}", file=sys.stderr)
         return 1
 
-    if args.format == "json":
-        print(summaries_to_json(summaries))
-    else:
-        print(format_summaries(summaries))
+    if not summaries:
+        print("Data not found.")
+        return 0
+
+    print(format_summaries(summaries))
     return 0
 
 

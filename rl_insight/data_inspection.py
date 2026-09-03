@@ -19,6 +19,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -27,8 +28,8 @@ from typing import Any
 
 from prometheus_client.parser import text_string_to_metric_families
 from pyarrow import parquet
+from tqdm import tqdm
 
-from .server.display import format_table
 from .utils.constants import MonitorPaths
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -36,18 +37,10 @@ _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 @dataclass(frozen=True)
 class SourceRange:
-    """Time range and object count for one data source."""
+    """Time range for one data source."""
 
     start: datetime
     end: datetime
-    count: int
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "start": self.start.isoformat(),
-            "end": self.end.isoformat(),
-            "count": self.count,
-        }
 
 
 @dataclass(frozen=True)
@@ -58,14 +51,6 @@ class ExperimentSummary:
     experiment: str
     prometheus: SourceRange | None
     tempo: SourceRange | None
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "project": self.project,
-            "experiment": self.experiment,
-            "prometheus": self.prometheus.as_dict() if self.prometheus else None,
-            "tempo": self.tempo.as_dict() if self.tempo else None,
-        }
 
 
 def inspect_data_directory(
@@ -110,16 +95,79 @@ def format_summaries(summaries: Sequence[ExperimentSummary]) -> str:
         ]
         for summary in summaries
     ]
-    return format_table(headers, rows)
+    return _format_table(headers, rows)
 
 
-def summaries_to_json(summaries: Sequence[ExperimentSummary]) -> str:
-    """Render experiment summaries as pretty-printed JSON."""
-    return json.dumps(
-        [summary.as_dict() for summary in summaries],
-        indent=2,
-        ensure_ascii=False,
+def _format_table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> str:
+    """Render a grouped table for experiment summaries."""
+    rendered_rows = [[_cell_lines(cell) for cell in row] for row in rows]
+    widths = [_display_width(header) for header in headers]
+    for row in rendered_rows:
+        for idx, cell_lines in enumerate(row):
+            widths[idx] = max(
+                [widths[idx], *(_display_width(line) for line in cell_lines)]
+            )
+
+    def _line(skip_first: bool = False) -> str:
+        if skip_first:
+            return (
+                "|"
+                + " " * (widths[0] + 2)
+                + "+"
+                + "+".join("-" * (width + 2) for width in widths[1:])
+                + "+"
+            )
+        return "+" + "+".join("-" * (width + 2) for width in widths) + "+"
+
+    def _row(values: Sequence[Sequence[str]], *, show_first: bool = True) -> str:
+        row_cells = list(values)
+        if not show_first:
+            row_cells[0] = [""]
+        lines = []
+        height = max(len(cell_lines) for cell_lines in row_cells)
+        for line_idx in range(height):
+            cells = []
+            for idx, cell_lines in enumerate(row_cells):
+                text = cell_lines[line_idx] if line_idx < len(cell_lines) else ""
+                cells.append(_pad(text, widths[idx]))
+            lines.append("| " + " | ".join(cells) + " |")
+        return "\n".join(lines)
+
+    group_starts = [True]
+    group_starts.extend(
+        previous[0][0] != current[0][0]
+        for previous, current in zip(rendered_rows, rendered_rows[1:])
     )
+
+    lines = [_line(), _row([[header] for header in headers]), _line()]
+    for idx, row in enumerate(rendered_rows):
+        lines.append(_row(row, show_first=group_starts[idx]))
+        if idx < len(rendered_rows) - 1:
+            same_group = rendered_rows[idx + 1][0][0] == row[0][0]
+            lines.append(_line(skip_first=same_group))
+    lines.append(_line())
+    return "\n".join(lines)
+
+
+def _cell_lines(cell: Any) -> list[str]:
+    lines = str(cell).splitlines()
+    return lines if lines else [""]
+
+
+def _display_width(text: str) -> int:
+    width = 0
+    for character in text:
+        if unicodedata.combining(character):
+            continue
+        if unicodedata.east_asian_width(character) in {"F", "W"}:
+            width += 2
+        else:
+            width += 1
+    return width
+
+
+def _pad(text: str, width: int) -> str:
+    return text + " " * (width - _display_width(text))
 
 
 def _inspect_prometheus(
@@ -131,34 +179,73 @@ def _inspect_prometheus(
     if not prometheus_dir.is_dir():
         return {}
 
-    output = _run_promtool(prometheus_dir, promtool_bin=promtool_bin)
     ranges: dict[tuple[str, str], SourceRange] = {}
-    for pair, timestamp in _parse_openmetrics(output):
-        _update_range(ranges, pair, timestamp)
+    for line in _promtool_lines(prometheus_dir, promtool_bin=promtool_bin):
+        for pair, timestamp in _parse_openmetrics(line):
+            _update_range(ranges, pair, timestamp)
     return ranges
 
 
-def _run_promtool(
+def _promtool_lines(
     prometheus_dir: Path,
     *,
     promtool_bin: str | Path | None,
-) -> str:
+) -> Iterator[str]:
     binary = _find_promtool(promtool_bin)
-    with tempfile.TemporaryDirectory(prefix="rl-insight-promtool-") as sandbox:
-        result = subprocess.run(
-            [
-                str(binary),
-                "--experimental",
-                "tsdb",
-                "dump-openmetrics",
-                f"--sandbox-dir-root={sandbox}",
-                str(prometheus_dir),
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    return result.stdout
+    estimated_total = _prometheus_sample_count(prometheus_dir)
+    with tempfile.TemporaryDirectory(
+        prefix=".rl-insight-promtool-",
+        dir=prometheus_dir.parent,
+    ) as sandbox:
+        command = [
+            str(binary),
+            "--experimental",
+            "tsdb",
+            "dump-openmetrics",
+            f"--sandbox-dir-root={sandbox}",
+            str(prometheus_dir),
+        ]
+        with tempfile.TemporaryFile(mode="w+") as stderr_file:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=stderr_file,
+                text=True,
+            )
+            progress = tqdm(
+                total=estimated_total,
+                desc="Prometheus samples",
+                unit="sample",
+                disable=False,
+            )
+            try:
+                for line in process.stdout:
+                    progress.update(1)
+                    yield line
+                if progress.n > progress.total:
+                    progress.total = progress.n
+            finally:
+                progress.close()
+                if process.stdout is not None:
+                    process.stdout.close()
+                process.wait()
+                stderr_file.seek(0)
+                stderr = stderr_file.read()
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    process.returncode,
+                    command,
+                    stderr=stderr,
+                )
+
+
+def _prometheus_sample_count(prometheus_dir: Path) -> int:
+    return sum(
+        json.loads(meta_file.read_text(encoding="utf-8"))
+        .get("stats", {})
+        .get("numSamples", 0)
+        for meta_file in prometheus_dir.glob("*/meta.json")
+    )
 
 
 def _find_promtool(explicit: str | Path | None) -> Path:
@@ -204,14 +291,29 @@ def _inspect_tempo(data_dir: Path) -> dict[tuple[str, str], SourceRange]:
 
     ranges: dict[tuple[str, str], SourceRange] = {}
     columns = ["StartTimeUnixNano", "EndTimeUnixNano", "rs"]
-    for parquet_file in sorted(tempo_dir.rglob("data.parquet")):
-        parquet_file_handle = parquet.ParquetFile(parquet_file)
-        for batch in parquet_file_handle.iter_batches(batch_size=256, columns=columns):
-            for row in batch.to_pylist():
-                start = _nanoseconds_to_datetime(row["StartTimeUnixNano"])
-                end = _nanoseconds_to_datetime(row["EndTimeUnixNano"])
-                for pair in _tempo_pairs(row):
-                    _update_range(ranges, pair, start, end=end)
+    parquet_files = sorted(tempo_dir.rglob("data.parquet"))
+    total_rows = sum(
+        parquet.ParquetFile(parquet_file).metadata.num_rows
+        for parquet_file in parquet_files
+    )
+    with tqdm(
+        total=total_rows,
+        desc="Tempo traces",
+        unit="trace",
+        disable=False,
+    ) as progress:
+        for parquet_file in parquet_files:
+            parquet_file_handle = parquet.ParquetFile(parquet_file)
+            for batch in parquet_file_handle.iter_batches(
+                batch_size=256,
+                columns=columns,
+            ):
+                for row in batch.to_pylist():
+                    start = _nanoseconds_to_datetime(row["StartTimeUnixNano"])
+                    end = _nanoseconds_to_datetime(row["EndTimeUnixNano"])
+                    for pair in _tempo_pairs(row):
+                        _update_range(ranges, pair, start, end=end)
+                progress.update(batch.num_rows)
     return ranges
 
 
@@ -233,8 +335,10 @@ def _attributes_to_pairs(
     for attribute in attributes:
         key = attribute.get("Key")
         value = attribute.get("Value")
+        if isinstance(value, (list, tuple)):
+            value = value[0] if value else None
         if key and value:
-            values[str(key)] = str(value[0])
+            values[str(key)] = str(value)
     project = values.get("project")
     experiment = values.get("experiment_name")
     return {(project, experiment)} if project and experiment else set()
@@ -250,12 +354,11 @@ def _update_range(
     finish = end if end is not None else start
     existing = ranges.get(pair)
     if existing is None:
-        ranges[pair] = SourceRange(start=start, end=finish, count=1)
+        ranges[pair] = SourceRange(start=start, end=finish)
         return
     ranges[pair] = SourceRange(
         start=min(existing.start, start),
         end=max(existing.end, finish),
-        count=existing.count + 1,
     )
 
 
@@ -272,4 +375,4 @@ def _format_range(start: datetime | None, end: datetime | None) -> str:
         return "-"
     if start.date() == end.date():
         return f"{start:%Y-%m-%d %H:%M}～{end:%H:%M}"
-    return f"{start:%Y-%m-%d %H:%M}～{end:%Y-%m-%d %H:%M}"
+    return f"{start:%Y-%m-%d %H:%M}～\n{end:%Y-%m-%d %H:%M}"

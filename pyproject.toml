@@ -21,6 +21,7 @@ dependencies = [
   "opentelemetry-sdk",
   "opentelemetry-exporter-otlp-proto-http",
   "pyarrow",
+  "tqdm",
   "pyyaml",
 ]
 
