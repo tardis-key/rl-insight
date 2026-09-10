@@ -40,4 +40,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check README and documentation links
-        run: python3 tests/special_sanity/check_links.py
+        run: python3 tests/special_sanity/check_links.py --branch "${{ github.base_ref || github.ref_name }}"

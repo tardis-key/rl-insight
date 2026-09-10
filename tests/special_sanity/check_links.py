@@ -17,7 +17,9 @@
 
 from __future__ import annotations
 
+import argparse
 import re
+import subprocess
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -31,8 +33,7 @@ OWN_REPO_GITHUB = "https://github.com/verl-project/rl-insight/"
 OWN_REPO_RAW = "https://raw.githubusercontent.com/verl-project/rl-insight/"
 OWN_RTDOCS = "https://rl-insight.readthedocs.io/"
 
-ALLOWED_REFS = {"main"}
-VERSION_TAG = re.compile(r"v?\d+\.\d+\.\d+")
+RELEASE_BRANCH = re.compile(r"v(\d+)\.(\d+)\.x")
 
 MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 RST_LINK = re.compile(r"`[^`<]+\s*<([^`>]+)>`_")
@@ -101,8 +102,25 @@ def own_repo_ref(target: str) -> str | None:
     return None
 
 
-def is_allowed_ref(ref: str) -> bool:
-    return ref in ALLOWED_REFS or VERSION_TAG.fullmatch(ref) is not None
+def own_rtdocs_ref(target: str) -> str | None:
+    if not target.startswith(OWN_RTDOCS):
+        return None
+    rest = target[len(OWN_RTDOCS) :]
+    if not rest.startswith("en/"):
+        return None
+    return rest.split("/", 2)[1]
+
+
+def is_allowed_ref_for_branch(ref: str, branch: str) -> bool:
+    if branch == "main":
+        return ref in {"main", "latest"}
+    release_match = RELEASE_BRANCH.fullmatch(branch)
+    if release_match:
+        major, minor = release_match.groups()
+        return (
+            ref == branch or re.fullmatch(rf"v{major}\.{minor}\.\d+", ref) is not None
+        )
+    return ref == branch
 
 
 def location(link: Link) -> str:
@@ -132,24 +150,37 @@ def check_docs_internal_links_are_relative() -> list[str]:
     return errors
 
 
-def check_no_links_to_other_branches() -> list[str]:
+def check_no_links_to_other_branches(branch: str) -> list[str]:
     errors: list[str] = []
     files = [README, *iter_doc_files()]
     for path in files:
         for link in extract_links(path):
-            ref = own_repo_ref(link.target)
-            if ref is not None and not is_allowed_ref(ref):
+            ref = own_repo_ref(link.target) or own_rtdocs_ref(link.target)
+            if ref is not None and not is_allowed_ref_for_branch(ref, branch):
                 errors.append(
-                    f"{location(link)}: absolute link references non-default branch '{ref}': {link.target}"
+                    f"{location(link)}: absolute link references '{ref}', which is not allowed on branch '{branch}': {link.target}"
                 )
     return errors
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--branch",
+        default=None,
+        help="Branch whose documentation-link policy should be enforced. Defaults to the current Git branch.",
+    )
+    args = parser.parse_args()
+    branch = (
+        args.branch
+        or subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True
+        ).strip()
+    )
     errors = [
         *check_readme_no_relative_links(),
         *check_docs_internal_links_are_relative(),
-        *check_no_links_to_other_branches(),
+        *check_no_links_to_other_branches(branch),
     ]
     if errors:
         print("Link policy violations:")
