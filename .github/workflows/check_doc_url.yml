@@ -11,7 +11,7 @@ on:
 
 jobs:
   check_doc_urls:
-    name: Validate External Documentation URLs
+    name: validate_external_documentation_urls
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -33,7 +33,7 @@ jobs:
         run: pytest tests/doc/test_docs_urls.py -v
 
   check_links:
-    name: Enforce Documentation Link Policy
+    name: enforce_documentation_link_policy
     runs-on: ubuntu-latest
     timeout-minutes: 2
 
