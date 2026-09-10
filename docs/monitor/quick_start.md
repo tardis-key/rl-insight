@@ -201,3 +201,5 @@ rl-insight server install
 
 
 If metrics do not appear, check that the monitor hub process is reachable from Prometheus and that the Prometheus configuration points to the hub `/metrics` endpoint.
+
+For the counterexample, see [Data Migration](https://github.com/verl-project/rl-insight/blob/main/docs/monitor/data_migration.md).

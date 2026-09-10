@@ -159,3 +159,7 @@ Join our Lark group to connect with the team and other developers:
 ## Contribution Guide
 
 See [CONTRIBUTING.md](https://github.com/verl-project/rl-insight/blob/main/CONTRIBUTING.md).
+
+## Data Migration
+
+See [Data Migration](./docs/monitor/data_migration.md).
