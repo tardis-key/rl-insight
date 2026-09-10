@@ -8,7 +8,7 @@ To collect CPU, memory, disk, network, or Ascend NPU metrics, start with
 :doc:`Hardware Monitoring <monitor/hardware/index>`.
 
 For offline Recipe utilities, see the
-`Recipe README <https://github.com/verl-project/rl-insight/blob/main/recipe/README.md>`_ on GitHub.
+`Recipe documentation <recipe/overview/architecture>`_.
 
 --------------------------------------------
 

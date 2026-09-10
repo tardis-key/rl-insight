@@ -31,7 +31,7 @@ jobs:
       - name: Run doc URL validation test
         run: pytest tests/doc/test_docs_urls.py -v
 
-  check_relative_links:
+  check_links:
     runs-on: ubuntu-latest
     timeout-minutes: 2
 
@@ -39,5 +39,5 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check for relative image/link references
-        run: python3 tests/special_sanity/check_relative_links.py
+      - name: Check README and documentation links
+        run: python3 tests/special_sanity/check_links.py
