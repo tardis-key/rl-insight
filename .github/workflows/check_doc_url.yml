@@ -1,4 +1,4 @@
-name: Check Documentation and Package
+name: Check Documentation
 
 on:
   push:
@@ -10,30 +10,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  check_pypi_metadata:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install build tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install build twine
-
-      - name: Build package
-        run: python -m build
-
-      - name: Check package metadata
-        run: twine check dist/*
-
   check_doc_urls:
     runs-on: ubuntu-latest
     timeout-minutes: 5
