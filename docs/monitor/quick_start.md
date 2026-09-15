@@ -3,6 +3,8 @@
 This guide starts RL-Insight Monitor from a fresh checkout, runs the local server stack, and adds the first metric and trace calls to training code.
 
 For service version requirements and Linux platform support, see [Server Installation](./server_installation.md).
+If your platform already provides an OTLP trace endpoint and scrapes Prometheus itself, see
+[Platform Integration](./platform_integration.md) instead of starting the RL-Insight server.
 
 ## 1. Install RL-Insight
 

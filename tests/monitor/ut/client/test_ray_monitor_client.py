@@ -84,6 +84,35 @@ def test_get_or_create_monitor_hub_should_create_actor_when_actor_is_missing(
     remote.assert_called_once_with(conf)
 
 
+def test_get_or_create_monitor_hub_should_propagate_external_otlp_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_actor_name(monkeypatch)
+
+    conf = OmegaConf.create(
+        {
+            "server": {"url": ""},
+            "otel": {"exporter": {"endpoint": "http://collector:4318/v1/traces"}},
+        }
+    )
+    actor = MagicMock()
+    remote = MagicMock(return_value=actor)
+    options = MagicMock(return_value=MagicMock(remote=remote))
+    monkeypatch.setattr(
+        client_module.ray, "get_actor", MagicMock(side_effect=ValueError)
+    )
+    monkeypatch.setattr(client_module, "MonitorHubActor", MagicMock(options=options))
+
+    assert client_module.get_or_create_monitor_hub(conf) is actor
+    options.assert_called_once_with(
+        name=_JOB_ACTOR_NAME,
+        namespace=MonitorRayActor.NAMESPACE,
+        runtime_env={
+            "env_vars": {"RL_INSIGHT_OTLP_ENDPOINT": "http://collector:4318/v1/traces"},
+        },
+    )
+
+
 def test_get_or_create_monitor_hub_should_reuse_winner_when_creation_races(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

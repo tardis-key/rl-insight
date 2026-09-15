@@ -20,7 +20,7 @@ import logging
 from typing import Any, cast
 
 import ray
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from ..collector.ray_monitor_hub import MonitorHubActor
 from ..utils.constants import MonitorEnv, MonitorRayActor
@@ -75,10 +75,14 @@ def get_or_create_monitor_hub(conf: DictConfig) -> Any:
         "namespace": namespace,
     }
     server_url = str(conf.server.url).strip()
+    otlp_endpoint = str(OmegaConf.select(conf, "otel.exporter.endpoint") or "").strip()
+    env_vars = {}
     if server_url:
-        actor_options["runtime_env"] = {
-            "env_vars": {MonitorEnv.SERVER_URL: server_url},
-        }
+        env_vars[MonitorEnv.SERVER_URL] = server_url
+    elif otlp_endpoint:
+        env_vars[MonitorEnv.OTLP_ENDPOINT] = otlp_endpoint
+    if env_vars:
+        actor_options["runtime_env"] = {"env_vars": env_vars}
 
     try:
         actor_cls = cast(Any, MonitorHubActor)

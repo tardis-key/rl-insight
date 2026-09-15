@@ -188,6 +188,19 @@ def test_update_prometheus_config_should_send_normalized_targets_when_server_is_
     response.raise_for_status.assert_called_once_with()
 
 
+def test_update_prometheus_config_should_noop_when_external_otlp_endpoint_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    post = MagicMock()
+    monkeypatch.delenv("RL_INSIGHT_SERVER_URL", raising=False)
+    monkeypatch.setenv("RL_INSIGHT_OTLP_ENDPOINT", "http://collector:4318/v1/traces")
+    monkeypatch.setattr(prometheus_module.requests, "post", post)
+
+    prometheus_module.update_prometheus_config(["host-a:9000"])
+
+    post.assert_not_called()
+
+
 def test_update_prometheus_config_should_reject_mismatched_labels_when_lengths_differ() -> (
     None
 ):

@@ -15,7 +15,6 @@
 """Shared constants for RL-Insight online monitoring."""
 
 from __future__ import annotations
-
 from pathlib import Path
 
 from omegaconf import DictConfig, OmegaConf
@@ -48,6 +47,7 @@ class MonitorEnv:
     """Environment variable names used by trainer-side monitor config overrides."""
 
     SERVER_URL = "RL_INSIGHT_SERVER_URL"
+    OTLP_ENDPOINT = "RL_INSIGHT_OTLP_ENDPOINT"
 
 
 class MonitorDefaults:

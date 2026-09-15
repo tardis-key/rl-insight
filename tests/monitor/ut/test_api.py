@@ -86,6 +86,40 @@ def test_init_should_leave_monitoring_disabled_when_server_url_is_missing(
     assert factory_called is False
 
 
+def test_init_should_enable_monitoring_when_external_otlp_endpoint_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = RecordingClient()
+    configs = []
+    monkeypatch.delenv("RL_INSIGHT_SERVER_URL", raising=False)
+    monkeypatch.setenv("RL_INSIGHT_OTLP_ENDPOINT", "http://collector:4318/v1/traces")
+    monkeypatch.setattr(
+        api, "create_monitor_client", lambda conf: configs.append(conf) or client
+    )
+
+    api.init(project="project-a", experiment_name="experiment-a")
+
+    assert api._STATE.enabled is True
+    assert str(configs[0].otel.exporter.endpoint) == ("http://collector:4318/v1/traces")
+
+
+def test_init_should_prefer_server_url_when_both_urls_are_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = RecordingClient()
+    configs = []
+    monkeypatch.setenv("RL_INSIGHT_SERVER_URL", "http://server:18080")
+    monkeypatch.setenv("RL_INSIGHT_OTLP_ENDPOINT", "http://collector:4318/v1/traces")
+    monkeypatch.setattr(
+        api, "create_monitor_client", lambda conf: configs.append(conf) or client
+    )
+
+    api.init()
+
+    assert str(configs[0].server.url) == "http://server:18080"
+    assert str(configs[0].otel.exporter.endpoint) == ""
+
+
 def test_metric_helpers_should_emit_typed_events_when_monitoring_is_enabled(
     recording_client: RecordingClient,
 ) -> None:

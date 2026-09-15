@@ -34,15 +34,32 @@ _TRAINING_MONITOR_DEFAULTS = OmegaConf.create(
             "backend": MonitorBackend.RAY,
             "url": "",
         },
+        "otel": {
+            "exporter": {
+                "endpoint": "",
+            },
+        },
         "prometheus": {
             "metrics_report_port": MonitorDefaults.METRICS_REPORT_PORT,
         },
     }
 )
 __all__ = [
+    "is_platform_mode",
     "load_monitor_config",
     "load_server_config_file",
 ]
+
+
+def is_platform_mode() -> bool:
+    """Return whether RL-Insight should use an external OTLP endpoint.
+
+    The managed RL-Insight server takes precedence when both URLs are set.
+    """
+
+    return not os.getenv(MonitorEnv.SERVER_URL) and bool(
+        os.getenv(MonitorEnv.OTLP_ENDPOINT)
+    )
 
 
 def load_monitor_config(
@@ -51,7 +68,8 @@ def load_monitor_config(
     """Merge trainer monitor defaults with optional user config.
 
     Args:
-        config: Partial mapping or ``DictConfig`` merged on top of built-in training defaults; may be ``None``.
+        config: Partial mapping or ``DictConfig`` merged on top of built-in
+            training defaults; may be ``None``.
 
     Returns:
         Fully merged config with environment variable overrides applied.
@@ -71,6 +89,17 @@ def load_monitor_config(
 
     if url := os.environ.get(MonitorEnv.SERVER_URL):
         merged.server.url = str(url).strip()
+    if endpoint := os.environ.get(MonitorEnv.OTLP_ENDPOINT):
+        merged.otel.exporter.endpoint = str(endpoint).strip()
+
+    if str(merged.server.url).strip() and str(merged.otel.exporter.endpoint).strip():
+        logger.warning(
+            "[rl-insight] Both %s and %s are set; using the RL-Insight server "
+            "URL and ignoring the external OTLP endpoint.",
+            MonitorEnv.SERVER_URL,
+            MonitorEnv.OTLP_ENDPOINT,
+        )
+        merged.otel.exporter.endpoint = ""
     return merged
 
 
@@ -78,7 +107,8 @@ def load_server_config_file(config_path: str | Path | None = None) -> DictConfig
     """Load server YAML used by ``rl-insight server start/stop``.
 
     Args:
-        config_path: YAML file path; default is the bundled ``config/config.yaml``.
+        config_path: YAML file path; default is the bundled
+            ``config/config.yaml``.
 
     Returns:
         Loaded server config.

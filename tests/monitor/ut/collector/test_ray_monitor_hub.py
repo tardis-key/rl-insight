@@ -80,6 +80,42 @@ def test_init_should_configure_collectors_and_register_scrape_target_when_create
     assert instance._registry is registry
 
 
+def test_init_should_use_external_otlp_endpoint_without_target_registration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = MagicMock()
+    trace_collector = MagicMock(enabled=True)
+    start_server = MagicMock()
+    update_config = MagicMock()
+    get_services = MagicMock()
+    registry_factory = MagicMock(return_value=registry)
+    trace_factory = MagicMock(return_value=trace_collector)
+    monkeypatch.setattr(hub_module, "get_server_services", get_services)
+    monkeypatch.setattr(hub_module, "MetricRegistry", registry_factory)
+    monkeypatch.setattr(hub_module, "OpenTelemetryTraceCollector", trace_factory)
+    monkeypatch.setattr(hub_module, "start_metrics_http_server", start_server)
+    monkeypatch.setattr(hub_module, "update_prometheus_config", update_config)
+    monkeypatch.setattr(hub_module.ray.util, "get_node_ip_address", lambda: "10.0.0.8")
+    conf = OmegaConf.create(
+        {
+            "server": {"namespace": "trainer", "url": ""},
+            "otel": {"exporter": {"endpoint": "http://collector:4318/v1/traces"}},
+            "prometheus": {"metrics_report_port": 9092},
+        }
+    )
+
+    instance = HubImplementation.__new__(HubImplementation)
+    instance.__init__(conf)
+
+    get_services.assert_not_called()
+    trace_factory.assert_called_once_with(
+        namespace="trainer",
+        endpoint="http://collector:4318/v1/traces",
+    )
+    start_server.assert_called_once_with(9092, addr="10.0.0.8")
+    update_config.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("event", "method", "expected_call"),
     [

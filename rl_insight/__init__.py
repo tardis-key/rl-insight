@@ -54,6 +54,7 @@ _EXPORTS = {
     "agent_loop_session": ".agent_loop",
     "finish": ".api",
     "init": ".api",
+    "is_platform_mode": ".utils.monitor_config_loader",
     "metric_count": ".api",
     "metric_gauge": ".api",
     "metric_histogram": ".api",

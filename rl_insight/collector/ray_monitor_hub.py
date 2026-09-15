@@ -20,7 +20,7 @@ import logging
 from typing import Any
 
 import ray
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from ..utils.constants import MonitorRayActor
 from .base import MonitorCollector
@@ -57,12 +57,18 @@ class MonitorHubActor(MonitorCollector):
         self._conf = conf
 
         namespace = str(self._conf.server.namespace)
-        services = get_server_services()
-        trace_endpoint = service_url_from_server_url(
-            str(self._conf.server.url),
-            services.get("otlp_port"),
-            "/v1/traces",
-        )
+        server_url = str(self._conf.server.url).strip()
+        if server_url:
+            services = get_server_services()
+            trace_endpoint = service_url_from_server_url(
+                server_url,
+                services.get("otlp_port"),
+                "/v1/traces",
+            )
+        else:
+            trace_endpoint = str(
+                OmegaConf.select(self._conf, "otel.exporter.endpoint") or ""
+            ).strip()
         self._registry = MetricRegistry(namespace=namespace)
         self._trace_collector = OpenTelemetryTraceCollector(
             namespace=namespace,
@@ -80,7 +86,10 @@ class MonitorHubActor(MonitorCollector):
         }
 
         start_metrics_http_server(self._metrics_port, addr=self._node_ip)
-        update_prometheus_config([format_host_port(self._node_ip, self._metrics_port)])
+        if server_url:
+            update_prometheus_config(
+                [format_host_port(self._node_ip, self._metrics_port)]
+            )
         logger.info(
             "[rl-insight] MonitorHubActor HTTP bind %s:%s, "
             "Prometheus scrape target %s:%s",

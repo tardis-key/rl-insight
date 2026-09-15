@@ -37,6 +37,7 @@ from .constants import (
     PrometheusScrape,
     prometheus_targets_file_from_config,
 )
+from .monitor_config_loader import is_platform_mode
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.WARNING)
@@ -372,6 +373,14 @@ def update_prometheus_config(
         labels: Optional per-target labels. When provided, its length must match
             ``server_addresses``.
     """
+    base_url = str(os.environ.get(MonitorEnv.SERVER_URL, "")).strip().rstrip("/")
+    if not base_url and is_platform_mode():
+        logger.info(
+            "[rl-insight] External OTLP mode is enabled; Prometheus target "
+            "registration is handled by the external platform."
+        )
+        return
+
     if not server_addresses:
         logger.warning("[rl-insight] No server addresses available to register")
         return
@@ -381,7 +390,6 @@ def update_prometheus_config(
             f"{len(labels)} != {len(server_addresses)}"
         )
 
-    base_url = str(os.environ.get(MonitorEnv.SERVER_URL, "")).strip().rstrip("/")
     if not base_url:
         logger.error(
             "[rl-insight] RL-Insight server URL is required; "

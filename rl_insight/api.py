@@ -30,8 +30,8 @@ from typing import Any, Callable, Generator, Mapping
 from omegaconf import DictConfig
 
 from .client import create_monitor_client
-from .utils.monitor_config_loader import load_monitor_config
 from .utils import MonitorEventKind
+from .utils.monitor_config_loader import load_monitor_config
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -99,10 +99,13 @@ def init(
         return
 
     monitor_conf = load_monitor_config(config)
-    if not str(monitor_conf.server.url).strip():
+    server_url = str(monitor_conf.server.url).strip()
+    otlp_endpoint = str(monitor_conf.otel.exporter.endpoint).strip()
+    if not server_url and not otlp_endpoint:
         logger.error(
-            "[rl-insight] RL-Insight server URL is required; set RL_INSIGHT_SERVER_URL "
-            "or server.url in init config."
+            "[rl-insight] Monitoring is disabled; set RL_INSIGHT_SERVER_URL for the "
+            "managed server mode or RL_INSIGHT_OTLP_ENDPOINT for the external "
+            "OTLP mode."
         )
         return
     client = create_monitor_client(monitor_conf)
