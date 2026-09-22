@@ -21,6 +21,7 @@ For offline Recipe utilities, see the
    Quick Start <monitor/quick_start>
    Platform Integration <monitor/platform_integration>
    Agent Loop Protocol <monitor/agent_loop_protocol>
+   Tempo Trace Fields <monitor/tempo_fields>
    Server Installation <monitor/server_installation>
    Data Directory Migration <monitor/data_migration>
    Hardware Monitoring <monitor/hardware/index>
