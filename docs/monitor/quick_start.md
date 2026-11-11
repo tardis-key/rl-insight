@@ -235,6 +235,7 @@ trainer:
       port: 18480
     traces:
       endpoint: ${oc.env:OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}
+      platform: jd
       headers:
         X-Scope-OrgID: ${oc.env:PLATFORM_TENANT_ID}
     labels:
@@ -244,6 +245,11 @@ trainer:
 The platform scrapes `http://<head-node-ip>:18480/metrics`. Use the environment
 variables supplied by your platform; `labels` is optional. The platform must
 already be able to discover and reach the endpoint.
+
+`traces.platform` selects a platform-specific attribute provider. With
+`platform: jd`, non-empty `A`, `B`, and `C` environment variables are attached
+to every exported Tempo span as `a`, `b`, and `c`. Caller-provided span
+attributes with the same name take precedence.
 
 For remote_write, replace the `metrics` block:
 

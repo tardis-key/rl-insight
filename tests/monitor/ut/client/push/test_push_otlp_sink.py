@@ -21,6 +21,19 @@ from omegaconf import OmegaConf
 
 from rl_insight.client.push.driver import build_sink
 from rl_insight.client.push.sinks.otlp import OtlpSpanSink, create_sink
+from rl_insight.utils.platform_fields import collect_platform_fields
+
+
+def test_platform_fields_should_support_jd_and_reject_unknown_platforms(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("A", "value-a")
+    monkeypatch.setenv("C", "value-c")
+
+    assert collect_platform_fields("jd") == {"a": "value-a", "c": "value-c"}
+    assert collect_platform_fields("") == {}
+    with pytest.raises(ValueError, match="Unknown monitor platform"):
+        collect_platform_fields("unknown")
 
 pytest.importorskip(
     "opentelemetry.exporter.otlp.proto.http.trace_exporter",
@@ -79,6 +92,28 @@ def test_custom_strip_prefix_and_service_name() -> None:
     sink.close()
 
 
+def test_emit_span_should_merge_jd_platform_fields_with_caller_priority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("A", "value-a")
+    monkeypatch.setenv("B", "value-b")
+    monkeypatch.setenv("C", "value-c")
+    sink, exporter = _sink(platform="jd")
+
+    sink.emit_span(
+        "trace.rollout", 1, 2, {"a": "caller-a", "step": 7}
+    )
+    sink.flush()
+
+    assert exporter.get_finished_spans()[0].attributes == {
+        "a": "caller-a",
+        "b": "value-b",
+        "c": "value-c",
+        "step": 7,
+    }
+    sink.close()
+
+
 def test_metric_primitives_are_no_ops() -> None:
     sink, exporter = _sink()
     sink.emit_counter("c", 1, {})
@@ -96,11 +131,13 @@ def test_factory_reads_config_and_requires_endpoint() -> None:
             "name": "tempo",
             "endpoint": "http://tempo:4318/v1/traces",
             "service_name": "svc",
+            "platform": "jd",
         }
     )
     sink = create_sink(conf)
     try:
         assert isinstance(sink, OtlpSpanSink)
+        assert sink._platform == "jd"
     finally:
         sink.close()
 

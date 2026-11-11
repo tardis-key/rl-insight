@@ -198,6 +198,25 @@ def test_training_config_resolves_only_monitoring_fields(tmp_path, monkeypatch):
         load_monitor_config({"metrics": {"pull": True}})
 
 
+def test_task_trace_platform_is_propagated_to_otlp_sink(tmp_path):
+    from rl_insight.utils.monitor_config_loader import expand_task_config
+
+    conf = expand_task_config(
+        {
+            "rl_insight": {
+                "traces": {
+                    "endpoint": "http://tempo:4318/v1/traces",
+                    "platform": "jd",
+                }
+            }
+        },
+        runtime_dir=tmp_path,
+    )
+
+    tempo_sink = next(sink for sink in conf.push.sinks if sink.platform == "jd")
+    assert tempo_sink.endpoint == "http://tempo:4318/v1/traces"
+
+
 @pytest.mark.parametrize(
     "options",
     [

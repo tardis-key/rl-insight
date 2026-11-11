@@ -33,6 +33,7 @@ from typing import Any, Mapping
 from omegaconf import OmegaConf
 
 from ....server.network import normalize_http_headers, normalize_http_url
+from ....utils.platform_fields import collect_platform_fields
 
 from .base import PushSink
 
@@ -67,6 +68,7 @@ class OtlpSpanSink(PushSink):
         service_name: str = _DEFAULT_SERVICE_NAME,
         strip_name_prefix: str = _DEFAULT_STRIP_PREFIX,
         headers: Mapping[str, str] | None = None,
+        platform: str = "",
         exporter: Any | None = None,
     ) -> None:
         super().__init__("")
@@ -80,6 +82,8 @@ class OtlpSpanSink(PushSink):
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         self._strip = strip_name_prefix
+        self._platform = str(platform)
+        collect_platform_fields(self._platform)
         self._exporter = exporter or OTLPSpanExporter(
             endpoint=endpoint, headers=dict(headers or {}) or None
         )
@@ -109,9 +113,13 @@ class OtlpSpanSink(PushSink):
         span_name = name
         if self._strip and span_name.startswith(self._strip):
             span_name = span_name[len(self._strip) :]
+        merged_attributes = {
+            **collect_platform_fields(self._platform),
+            **dict(attributes),
+        }
         span = self._tracer.start_span(
             span_name,
-            attributes=_clean_attributes(attributes),
+            attributes=_clean_attributes(merged_attributes),
             start_time=int(start_time_ns),
         )
         span.end(end_time=int(end_time_ns))
@@ -130,9 +138,11 @@ def create_sink(conf: Any) -> OtlpSpanSink:
     strip_raw = OmegaConf.select(conf, "strip_name_prefix")
     strip_prefix = _DEFAULT_STRIP_PREFIX if strip_raw is None else str(strip_raw)
     headers = normalize_http_headers(OmegaConf.select(conf, "headers"), "OTLP headers")
+    platform = str(OmegaConf.select(conf, "platform") or "")
     return OtlpSpanSink(
         endpoint,
         service_name=service_name,
         strip_name_prefix=strip_prefix,
         headers=headers,
+        platform=platform,
     )

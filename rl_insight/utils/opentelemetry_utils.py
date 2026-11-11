@@ -19,6 +19,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from .platform_fields import collect_platform_fields
+
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -43,8 +45,16 @@ def _reduce_otel_export_log_noise() -> None:
 class OpenTelemetryTraceCollector:
     """Export closed root spans to Tempo via OTLP/HTTP."""
 
-    def __init__(self, namespace: str = "", endpoint: str | None = None) -> None:
+    def __init__(
+        self,
+        namespace: str = "",
+        endpoint: str | None = None,
+        *,
+        platform: str = "",
+    ) -> None:
         self._tracer = None
+        self._platform = str(platform)
+        collect_platform_fields(self._platform)
         if not endpoint:
             logger.warning(
                 "[rl-insight] OpenTelemetry trace export is disabled because no OTLP endpoint "
@@ -73,10 +83,14 @@ class OpenTelemetryTraceCollector:
     ) -> None:
         if self._tracer is None:
             return
+        merged_attributes = {
+            **collect_platform_fields(self._platform),
+            **dict(attributes or {}),
+        }
 
         span = self._tracer.start_span(
             name,
             start_time=start_time_ns,
-            attributes=attributes,
+            attributes=merged_attributes,
         )
         span.end(end_time=end_time_ns)

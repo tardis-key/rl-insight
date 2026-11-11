@@ -24,6 +24,20 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from rl_insight.utils import opentelemetry_utils as otel_module
+from rl_insight.utils.platform_fields import collect_platform_fields
+
+
+def test_jd_platform_fields_should_read_non_empty_environment_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("A", "platform-a")
+    monkeypatch.setenv("B", "platform-b")
+    monkeypatch.delenv("C", raising=False)
+
+    assert collect_platform_fields("jd") == {"a": "platform-a", "b": "platform-b"}
+    assert collect_platform_fields(None) == {}
+    with pytest.raises(ValueError, match="Unknown monitor platform"):
+        collect_platform_fields("unknown")
 
 
 def test_init_should_disable_collection_when_endpoint_is_missing(
@@ -62,3 +76,30 @@ def test_record_span_should_export_timing_attributes_and_resource_when_enabled(
     assert (spans[0].start_time, spans[0].end_time) == (1_000_000, 2_500_000)
     assert spans[0].attributes == {"step": 7, "worker": "w0"}
     assert spans[0].resource.attributes[SERVICE_NAME] == "trainer-monitor"
+
+
+def test_record_span_should_merge_jd_platform_fields_with_caller_priority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("A", "platform-a")
+    monkeypatch.setenv("B", "platform-b")
+    monkeypatch.setenv("C", "platform-c")
+    exporter = InMemorySpanExporter()
+    monkeypatch.setattr(otel_module, "OTLPSpanExporter", lambda endpoint: exporter)
+    monkeypatch.setattr(otel_module, "BatchSpanProcessor", SimpleSpanProcessor)
+    collector = otel_module.OpenTelemetryTraceCollector(
+        namespace="trainer-monitor",
+        endpoint="http://tempo:4318/v1/traces",
+        platform="jd",
+    )
+
+    collector.record_span(
+        "rollout", 1, 2, attributes={"a": "caller-a", "step": 1}
+    )
+
+    assert exporter.get_finished_spans()[0].attributes == {
+        "a": "caller-a",
+        "b": "platform-b",
+        "c": "platform-c",
+        "step": 1,
+    }

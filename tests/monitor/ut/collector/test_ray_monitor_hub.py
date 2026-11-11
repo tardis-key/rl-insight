@@ -80,6 +80,7 @@ def test_init_should_configure_collectors_and_register_scrape_target_when_create
     trace_factory.assert_called_once_with(
         namespace="trainer",
         endpoint="http://host:4318/v1/traces",
+        platform="",
     )
     start_server.assert_called_once_with(9092, addr="10.0.0.8")
     update_config.assert_called_once_with(

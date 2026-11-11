@@ -126,7 +126,9 @@ class MonitorHubActor(MonitorCollector):
             self._context.labels(),
         )
         self._trace_collector = OpenTelemetryTraceCollector(
-            namespace=namespace, endpoint=trace_endpoint
+            namespace=namespace,
+            endpoint=trace_endpoint,
+            platform=str(OmegaConf.select(self._conf, "traces.platform") or ""),
         )
 
         self._events_applied = 0

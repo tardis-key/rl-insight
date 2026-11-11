@@ -45,6 +45,9 @@ _TRAINING_MONITOR_DEFAULTS = OmegaConf.create(
         "prometheus": {
             "metrics_report_port": MonitorDefaults.METRICS_REPORT_PORT,
         },
+        "traces": {
+            "platform": "",
+        },
     }
 )
 
@@ -73,6 +76,7 @@ class _TaskTraces:
     endpoint: str = ""
     headers: dict[str, Any] = field(default_factory=dict)
     service_name: str = ""
+    platform: str = ""
 
 
 @dataclass
