@@ -79,6 +79,40 @@ def test_custom_strip_prefix_and_service_name() -> None:
     sink.close()
 
 
+def test_jd_platform_freezes_job_namespace_and_pod_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PROJECT_NAME", "project-a")
+    monkeypatch.setenv("EA_GROUP", "group-a")
+    monkeypatch.setenv("HOSTNAME", "pod-a")
+    sink, exporter = _sink(platform="jd")
+    sink.emit_span("trace.generate", 0, 1000, {"state_name": "generate"})
+    from rl_insight.utils.monitor_config_loader import _TaskTraces
+
+    assert _TaskTraces(platform="jd").platform == "jd"
+    sink.flush()
+    attrs = dict(exporter.get_finished_spans()[0].attributes)
+    assert attrs["job-name"] == "project-a"
+    assert attrs["namespace"] == "group-a"
+    assert attrs["pod"] == "pod-a"
+    monkeypatch.setenv("PROJECT_NAME", "changed")
+    sink.emit_span("trace.generate", 1000, 2000, {})
+    sink.flush()
+    attrs = dict(exporter.get_finished_spans()[1].attributes)
+    assert attrs["job-name"] == "project-a"
+    sink.close()
+
+
+def test_jd_platform_requires_all_environment_variables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("PROJECT_NAME", "EA_GROUP", "HOSTNAME"):
+        monkeypatch.setenv(name, "present")
+    monkeypatch.delenv("EA_GROUP")
+    with pytest.raises(ValueError, match="EA_GROUP"):
+        _sink(platform="jd")
+
+
 def test_metric_primitives_are_no_ops() -> None:
     sink, exporter = _sink()
     sink.emit_counter("c", 1, {})

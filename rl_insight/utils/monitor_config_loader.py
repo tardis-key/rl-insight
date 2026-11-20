@@ -73,6 +73,7 @@ class _TaskTraces:
     endpoint: str = ""
     headers: dict[str, Any] = field(default_factory=dict)
     service_name: str = ""
+    platform: str = ""
 
 
 @dataclass

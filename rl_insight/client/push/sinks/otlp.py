@@ -28,6 +28,7 @@ working as long as this sink is not configured.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Mapping
 
 from omegaconf import OmegaConf
@@ -40,6 +41,11 @@ from .base import PushSink
 _SCALAR = (str, bool, int, float)
 _DEFAULT_SERVICE_NAME = "rl_insight_monitor"
 _DEFAULT_STRIP_PREFIX = "trace."
+_JD_TRACE_LABELS = {
+    "job-name": "PROJECT_NAME",
+    "namespace": "EA_GROUP",
+    "pod": "HOSTNAME",
+}
 
 
 def _clean_attributes(attributes: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -57,6 +63,23 @@ def _clean_attributes(attributes: Mapping[str, Any] | None) -> dict[str, Any]:
     return out
 
 
+def _platform_attributes(platform: str) -> dict[str, str]:
+    """Return required tags frozen from this process's environment."""
+    if platform.strip().lower() != "jd":
+        return {}
+    missing = [
+        env_name for env_name in _JD_TRACE_LABELS.values() if not os.environ.get(env_name)
+    ]
+    if missing:
+        raise ValueError(
+            "platform 'jd' requires environment variables: " + ", ".join(missing)
+        )
+    return {
+        key: str(os.environ[env_name])
+        for key, env_name in _JD_TRACE_LABELS.items()
+    }
+
+
 class OtlpSpanSink(PushSink):
     """Export completed spans through an OTLP/HTTP ``OTLPSpanExporter``."""
 
@@ -68,6 +91,7 @@ class OtlpSpanSink(PushSink):
         strip_name_prefix: str = _DEFAULT_STRIP_PREFIX,
         headers: Mapping[str, str] | None = None,
         exporter: Any | None = None,
+        platform: str = "",
     ) -> None:
         super().__init__("")
         # A missing otel install raises ImportError at module load; the push
@@ -80,6 +104,7 @@ class OtlpSpanSink(PushSink):
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
         self._strip = strip_name_prefix
+        self._platform_attributes = _platform_attributes(platform)
         self._exporter = exporter or OTLPSpanExporter(
             endpoint=endpoint, headers=dict(headers or {}) or None
         )
@@ -111,7 +136,10 @@ class OtlpSpanSink(PushSink):
             span_name = span_name[len(self._strip) :]
         span = self._tracer.start_span(
             span_name,
-            attributes=_clean_attributes(attributes),
+            attributes={
+                **self._platform_attributes,
+                **_clean_attributes(attributes),
+            },
             start_time=int(start_time_ns),
         )
         span.end(end_time=int(end_time_ns))
@@ -130,9 +158,11 @@ def create_sink(conf: Any) -> OtlpSpanSink:
     strip_raw = OmegaConf.select(conf, "strip_name_prefix")
     strip_prefix = _DEFAULT_STRIP_PREFIX if strip_raw is None else str(strip_raw)
     headers = normalize_http_headers(OmegaConf.select(conf, "headers"), "OTLP headers")
+    platform = str(OmegaConf.select(conf, "platform") or "")
     return OtlpSpanSink(
         endpoint,
         service_name=service_name,
         strip_name_prefix=strip_prefix,
         headers=headers,
+        platform=platform,
     )
