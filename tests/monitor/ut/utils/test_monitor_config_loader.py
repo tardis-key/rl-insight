@@ -198,6 +198,33 @@ def test_training_config_resolves_only_monitoring_fields(tmp_path, monkeypatch):
         load_monitor_config({"metrics": {"pull": True}})
 
 
+def test_explicit_run_identity_flows_into_hub_sinks(monkeypatch, tmp_path):
+    from rl_insight.utils.monitor_config_loader import (
+        expand_task_config,
+        load_monitor_config,
+    )
+
+    monkeypatch.delenv("RL_INSIGHT_SERVER_URL", raising=False)
+    expected = {"project": "p", "experiment_name": "e"}
+    conf = load_monitor_config(
+        {"rl_insight": {"metrics": {"pull": True}}}, identity=expected
+    )
+    task = conf.hub.output.task_config
+    assert not task.labels
+
+    worker = expand_task_config(
+        {"rl_insight": task}, runtime_dir=tmp_path, identity=expected
+    )
+    assert worker.push.sinks[0].labels == expected
+
+    with pytest.raises(ValueError, match="conflict"):
+        expand_task_config(
+            {"rl_insight": {"metrics": {"pull": True}, "labels": {"project": "other"}}},
+            runtime_dir=tmp_path,
+            identity=expected,
+        )
+
+
 @pytest.mark.parametrize(
     "options",
     [

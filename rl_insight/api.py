@@ -116,7 +116,17 @@ def init(
         )
         return
 
-    monitor_conf = load_monitor_config(config)
+    monitor_conf = load_monitor_config(
+        config,
+        identity={
+            key: value
+            for key, value in {
+                "project": project,
+                "experiment_name": experiment_name,
+            }.items()
+            if value is not None
+        },
+    )
     if monitor_conf.get("enabled") is False:
         return
     client = None
@@ -144,6 +154,10 @@ def init(
             )
         client = create_monitor_client(monitor_conf)
         monitor_conf = getattr(client, "conf", monitor_conf)
+        if not configured:
+            run_metadata = monitor_conf.get("run_metadata") or {}
+            project = run_metadata.get("project") or project
+            experiment_name = run_metadata.get("experiment_name") or experiment_name
         fixed_labels = metric_labels(
             dict(OmegaConf.select(monitor_conf, "labels") or {})
         )

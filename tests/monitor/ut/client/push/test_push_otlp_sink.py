@@ -79,6 +79,26 @@ def test_custom_strip_prefix_and_service_name() -> None:
     sink.close()
 
 
+def test_emit_span_exports_runtime_identity() -> None:
+    sink, exporter = _sink()
+    sink.emit_span(
+        "trace.generate",
+        0,
+        1000,
+        {
+            "state_name": "generate",
+            "state_lane_id": "replica_0",
+            "project": "p",
+            "experiment_name": "e",
+        },
+    )
+    sink.flush()
+    attrs = dict(exporter.get_finished_spans()[0].attributes)
+    assert attrs["project"] == "p"
+    assert attrs["experiment_name"] == "e"
+    sink.close()
+
+
 def test_jd_platform_freezes_job_namespace_and_pod_from_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

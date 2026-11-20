@@ -136,6 +136,8 @@ def _merge_external_config(base: DictConfig) -> DictConfig:
 
 def load_monitor_config(
     config: Mapping[str, Any] | DictConfig | None = None,
+    *,
+    identity: Mapping[str, Any] | None = None,
 ) -> DictConfig:
     """Load monitor config with layered overrides.
 
@@ -147,13 +149,15 @@ def load_monitor_config(
     Args:
         config: Partial mapping or ``DictConfig`` merged on top of defaults and
             external file config; may be ``None``.
+        identity: Optional ``project`` and ``experiment_name`` from the SDK's
+            initialization. They are attached to the Push output sinks.
 
     Returns:
         Fully merged config with environment variable overrides applied.
     """
     node = _task_node(config)
     if node is not None:
-        return _load_task_config(node)
+        return _load_task_config(node, identity=identity)
     merged = _merge_external_config(_copy_defaults())
 
     if config is not None:
@@ -168,6 +172,16 @@ def load_monitor_config(
         merged.server.url = str(url).strip()
     if backend := os.environ.get(MonitorEnv.SERVER_BACKEND, "").strip():
         merged.server.backend = backend
+    if identity and merged.get("run_metadata") is None:
+        OmegaConf.update(
+            merged,
+            "run_metadata",
+            {
+                "project": identity.get("project") or "uncategorized",
+                "experiment_name": identity.get("experiment_name") or "unnamed",
+            },
+            force_add=True,
+        )
     return merged
 
 
@@ -238,20 +252,30 @@ def _task_options(node: DictConfig) -> dict[str, Any] | None:
         raise ValueError(f"Invalid rl_insight configuration: {exc}") from exc
 
 
-def _load_task_config(node: DictConfig) -> DictConfig:
+def _load_task_config(
+    node: DictConfig, *, identity: Mapping[str, Any] | None = None
+) -> DictConfig:
     if os.environ.get(MonitorEnv.CONFIG_PATH):
         raise ValueError("Training configuration conflicts with RL_INSIGHT_CONFIG")
     options = _task_options(node)
     if options is None:
         return OmegaConf.merge(_copy_defaults(), {"enabled": False})
     expanded = _expand_task_options(
-        options, runtime_dir=MonitorPaths.STATE_ROOT / "tasks"
+        options, runtime_dir=MonitorPaths.STATE_ROOT / "tasks", identity=identity
     )
     inherited_url = os.environ.get(MonitorEnv.SERVER_URL, "").strip().rstrip("/")
     if inherited_url and inherited_url != str(expanded.server.url).rstrip("/"):
         raise ValueError("Server URL environment conflicts with training configuration")
     if os.environ.get(MonitorEnv.SERVER_BACKEND):
         raise ValueError("Training configuration selects its own outputs")
+    if identity and expanded.server.backend == MonitorBackend.PUSH:
+        options = {
+            **options,
+            "labels": {
+                **metric_labels(options.get("labels", {})),
+                **metric_labels(identity),
+            },
+        }
     hub = {
         "signature": hashlib.sha256(
             json.dumps(options, sort_keys=True).encode()
@@ -260,9 +284,15 @@ def _load_task_config(node: DictConfig) -> DictConfig:
         "close_timeout": 30 + expanded.server.endpoint_ttl,
     }
     if expanded.server.backend == MonitorBackend.PUSH:
+        task_config = {
+            **options,
+            "labels": dict(
+                OmegaConf.select(expanded, "labels") or OmegaConf.create({})
+            ),
+        }
         hub["output"] = {
             "server": {"backend": MonitorBackend.PUSH},
-            "task_config": options,
+            "task_config": task_config,
         }
     else:
         hub["services"] = options
@@ -283,6 +313,7 @@ def expand_task_config(
     config: Mapping[str, Any] | DictConfig,
     *,
     runtime_dir: str | Path,
+    identity: Mapping[str, Any] | None = None,
 ) -> DictConfig | None:
     """Project public monitoring options onto the existing service template."""
     source = config if OmegaConf.is_config(config) else OmegaConf.create(config)
@@ -292,15 +323,25 @@ def expand_task_config(
     if not isinstance(node, DictConfig):
         raise ValueError("rl_insight must be an object")
     options = _task_options(node)
+    if options is not None and identity:
+        supplied = dict(options.get("labels", {}))
+        for key, value in identity.items():
+            if key in supplied and supplied[key] != value:
+                raise ValueError(f"Sink labels conflict with task identity: {key}")
+            supplied[key] = value
+        options["labels"] = supplied
     return (
-        _expand_task_options(options, runtime_dir=runtime_dir)
+        _expand_task_options(options, runtime_dir=runtime_dir, identity=identity)
         if options is not None
         else None
     )
 
 
 def _expand_task_options(
-    options: dict[str, Any], *, runtime_dir: str | Path
+    options: dict[str, Any],
+    *,
+    runtime_dir: str | Path,
+    identity: Mapping[str, Any] | None = None,
 ) -> DictConfig:
     defaults = OmegaConf.to_container(_TASK_SCHEMA.server)
     settings = {
@@ -329,7 +370,7 @@ def _expand_task_options(
     )
     conf.labels = metric_labels(options.get("labels", {}))
     if options.keys() & (_TASK_SELECTORS - {"enabled"}):
-        return _configure_outputs(conf, options)
+        return _configure_outputs(conf, options, identity=identity)
     return conf
 
 
@@ -337,8 +378,20 @@ _PROMETHEUS_SINK = "rl_insight.client.push.sinks.prometheus:create_sink"
 _OTLP_SINK = "rl_insight.client.push.sinks.otlp:create_sink"
 
 
-def _configure_outputs(conf: DictConfig, options: dict[str, Any]) -> DictConfig:
+def _configure_outputs(
+    conf: DictConfig,
+    options: dict[str, Any],
+    *,
+    identity: Mapping[str, Any] | None = None,
+) -> DictConfig:
     """Project task output settings onto existing sink and service configuration."""
+    if identity:
+        supplied = dict(options.get("labels", {}))
+        for key, value in identity.items():
+            if key in supplied and supplied[key] != value:
+                raise ValueError(f"Sink labels conflict with task identity: {key}")
+            supplied[key] = value
+        options = {**options, "labels": supplied}
     labels = dict(conf.labels)
     advanced = "sinks" in options
     if advanced and any(key in options for key in ("metrics", "traces")):
