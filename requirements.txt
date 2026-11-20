@@ -1,0 +1,11 @@
+# Main project runtime dependencies.
+ray
+omegaconf
+fastapi
+uvicorn
+requests
+prometheus_client>=0.23.1
+opentelemetry-sdk
+opentelemetry-exporter-otlp-proto-http
+pyyaml
+psutil

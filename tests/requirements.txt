@@ -1,0 +1,3 @@
+# Test-only dependencies. Install ../requirements.txt first for runtime dependencies.
+# Keep this list synchronized with the test extra in ../pyproject.toml.
+pytest

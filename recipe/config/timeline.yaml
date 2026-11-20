@@ -1,0 +1,18 @@
+# Timeline visualization preset
+
+pipeline:
+  type: OfflineInsightPipeline  # OfflineInsightPipeline
+
+input:
+  rank_list: all               # Rank id list, e.g. '0,1,2' or 'all'
+
+output:
+  path: output                 # Output directory path
+
+timeline:
+  parser:
+    type: mstx                 # mstx | torch | nvtx
+  visualizer:
+    type: html                 # html | png
+    width: 2000                # Image width in pixels (png only)
+    scale: 2                   # Image scale factor (png only)

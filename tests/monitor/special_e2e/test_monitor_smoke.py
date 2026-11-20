@@ -1,0 +1,329 @@
+# Copyright (c) 2026 verl-project authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Data-path tests for a monitor stack managed by the CI workflow."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+import uuid
+from collections.abc import Callable, Generator
+from dataclasses import dataclass
+from typing import Any, cast
+
+import pytest
+import ray
+import requests
+
+import rl_insight as insight
+from rl_insight import agent_loop_session, trace_span
+from rl_insight.agent_loop import agent_loop_lane_id
+from rl_insight.client.ray_monitor_client import _current_job_actor_name
+from rl_insight.utils.constants import MonitorRayActor
+from rl_insight.utils.protocol import SDK_VERSION_HEADER
+
+pytestmark = pytest.mark.skipif(
+    sys.platform not in {"linux", "win32"},
+    reason="the managed server stack supports Linux and Windows",
+)
+
+SERVER_URL = os.environ.get("RL_INSIGHT_SERVER_URL", "http://127.0.0.1:18080")
+TEMPO_QUERY_URL = os.environ.get("RL_INSIGHT_TEMPO_QUERY_URL", "http://127.0.0.1:3200")
+READY_TIMEOUT_SECONDS = 60
+TEST_RUN_ID = uuid.uuid4().hex
+EXPERIMENT_NAME = f"monitor-smoke-{TEST_RUN_ID}"
+
+
+@dataclass(frozen=True)
+class _SmokeTrajectory:
+    chain_id: int
+    reward_score: float
+    num_turns: int
+
+
+def _wait_for_json(
+    url: str,
+    *,
+    params: dict[str, str] | None = None,
+    headers: dict[str, str] | None = None,
+    ready: Callable[[dict[str, Any]], bool] = bool,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + READY_TIMEOUT_SECONDS
+    last_error: Exception | None = None
+    last_payload: dict[str, Any] | None = None
+    while time.monotonic() < deadline:
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=3)
+            response.raise_for_status()
+            payload = response.json()
+            last_payload = payload
+            if ready(payload):
+                return payload
+        except (requests.RequestException, ValueError) as exc:
+            last_error = exc
+        time.sleep(1)
+    raise AssertionError(
+        f"{url} was not ready within {READY_TIMEOUT_SECONDS}s: "
+        f"last_error={last_error} last_payload={last_payload}"
+    )
+
+
+@pytest.fixture(scope="module")
+def monitor_stack() -> Generator[dict[str, str], None, None]:
+    """Connect the reporting client to the stack started by the workflow."""
+    os.environ["RL_INSIGHT_SERVER_URL"] = SERVER_URL
+    services = _wait_for_json(
+        f"{SERVER_URL}/api/v1/services",
+        headers={SDK_VERSION_HEADER: insight.__version__},
+        ready=lambda data: data.get("status") == "ok",
+    )
+    endpoints = {
+        "prometheus": f"http://127.0.0.1:{services['prometheus_port']}",
+        "otlp": f"http://127.0.0.1:{services['otlp_port']}",
+        "tempo": TEMPO_QUERY_URL,
+    }
+
+    ray.init(namespace=MonitorRayActor.NAMESPACE, ignore_reinit_error=True)
+    insight.init(
+        project="rl-insight-e2e",
+        experiment_name=EXPERIMENT_NAME,
+        config={
+            "prometheus": {
+                "metrics_report_port": int(
+                    os.environ.get("RL_INSIGHT_METRICS_REPORT_PORT", "9092")
+                )
+            }
+        },
+    )
+    try:
+        yield endpoints
+    finally:
+        insight.finish()
+        try:
+            hub = ray.get_actor(
+                _current_job_actor_name(), namespace=MonitorRayActor.NAMESPACE
+            )
+            ray.kill(hub, no_restart=True)
+        except ValueError:
+            pass
+        ray.shutdown()
+
+
+def test_monitor_services_should_be_reachable_when_stack_is_running(
+    monitor_stack: dict[str, str],
+) -> None:
+    """Verify the control, metrics, and trace data paths are reachable."""
+    health = requests.get(f"{SERVER_URL}/healthz", timeout=3)
+    prometheus = requests.get(f"{monitor_stack['prometheus']}/-/ready", timeout=3)
+    tempo = requests.get(f"{monitor_stack['tempo']}/ready", timeout=3)
+    otlp = requests.get(f"{monitor_stack['otlp']}/v1/traces", timeout=3)
+    hub = ray.get_actor(_current_job_actor_name(), namespace=MonitorRayActor.NAMESPACE)
+    hub_status = cast(dict[str, Any], ray.get(hub.get_context.remote()).to_dict())
+
+    assert health.json() == {"status": "ok"}
+    assert prometheus.ok
+    assert tempo.ok
+    assert otlp.status_code < 500
+    assert requests.get(hub_status["metrics_endpoint"], timeout=3).ok
+    assert hub_status["otel_traces_enabled"] is True
+
+
+def test_monitor_metrics_should_match_reported_values_when_events_are_emitted(
+    monitor_stack: dict[str, str],
+) -> None:
+    """Report counter, gauge, and histogram events and verify stored values."""
+    for step in range(3):
+        insight.metric_count(
+            "train_step", amount=1, worker="trainer_0", test_run=TEST_RUN_ID
+        )
+        insight.metric_gauge(
+            "reward_mean",
+            value=1.0 + step * 0.01,
+            worker="trainer_0",
+            test_run=TEST_RUN_ID,
+        )
+        insight.metric_histogram(
+            "step_latency_ms",
+            value=200 + step * 20,
+            worker="trainer_0",
+            test_run=TEST_RUN_ID,
+        )
+
+    hub = ray.get_actor(_current_job_actor_name(), namespace=MonitorRayActor.NAMESPACE)
+    ray.get(hub.get_context.remote()).to_dict()
+
+    expected_values = {
+        "rl_insight_monitor_train_step_total": 3.0,
+        "rl_insight_monitor_reward_mean": 1.02,
+        "rl_insight_monitor_step_latency_ms_count": 3.0,
+        "rl_insight_monitor_step_latency_ms_sum": 660.0,
+    }
+    for metric_name, expected in expected_values.items():
+        payload = _wait_for_json(
+            f"{monitor_stack['prometheus']}/api/v1/query",
+            params={
+                "query": (f'{metric_name}{{test_run="{TEST_RUN_ID}"}} == {expected}')
+            },
+            ready=lambda data: bool(data.get("data", {}).get("result")),
+        )
+        result = payload["data"]["result"]
+        assert result[0]["metric"]["worker"] == "trainer_0"
+        assert float(result[0]["value"][1]) == pytest.approx(expected)
+
+
+def test_monitor_trace_state_should_be_queryable_when_interval_is_reported(
+    monitor_stack: dict[str, str],
+) -> None:
+    """Report a state trace and verify Tempo stores its name and attributes."""
+    trace_name = "monitor_e2e_rollout_generate"
+    with insight.trace_state(
+        trace_name,
+        state_lane_id="replica_0",
+        step=7,
+        test_run=TEST_RUN_ID,
+    ):
+        time.sleep(0.1)
+
+    hub = ray.get_actor(_current_job_actor_name(), namespace=MonitorRayActor.NAMESPACE)
+    status = cast(dict[str, Any], ray.get(hub.get_context.remote()).to_dict())
+    assert status["otel_traces_enabled"] is True
+
+    search = _wait_for_json(
+        f"{monitor_stack['tempo']}/api/search",
+        params={"q": f'{{ name = "{trace_name}" && span.test_run = "{TEST_RUN_ID}" }}'},
+        ready=lambda data: bool(data.get("traces")),
+    )
+    trace_id = search["traces"][0]["traceID"]
+    trace = _wait_for_json(f"{monitor_stack['tempo']}/api/traces/{trace_id}")
+    serialized_trace = json.dumps(trace)
+
+    assert trace_name in serialized_trace
+    assert TEST_RUN_ID in serialized_trace
+
+
+def test_agent_loop_dashboard_should_query_generated_protocol_data(
+    monitor_stack: dict[str, str],
+) -> None:
+    """Generate one Agent Loop run and verify Tempo and Prometheus queryability."""
+    project = "rl-insight-e2e"
+    experiment_name = insight.get_context().experiment_name
+    sample = "0"
+    session_index = "0"
+    session_id = f"session-{TEST_RUN_ID}"
+    global_steps = 1
+
+    session = agent_loop_session(
+        project=project,
+        experiment_name=experiment_name,
+        sample=sample,
+        session=session_index,
+        traj=0,
+        uid=f"uid-{TEST_RUN_ID}",
+        global_steps=global_steps,
+        session_id=session_id,
+    )
+    identity = session.identity
+
+    trace_span(
+        name="agent_task",
+        start_time_ns=time.time_ns(),
+        end_time_ns=time.time_ns(),
+        attributes={
+            **identity,
+            "monitor.trace_source": "task",
+            "task_name": "monitor-smoke",
+            "image_ref": "python:3.12",
+            "prompt_hash": TEST_RUN_ID,
+            "status": "success",
+            "reward": 1.0,
+            "accuracy": 1.0,
+            "finished": True,
+            "reward_posted": True,
+            "error": "",
+        },
+    )
+
+    trace_span(
+        name="gateway_generation",
+        start_time_ns=time.time_ns(),
+        end_time_ns=time.time_ns(),
+        attributes={
+            **identity,
+            "monitor.trace_source": "gateway",
+            "state_lane_id": agent_loop_lane_id(
+                experiment_name,
+                sample,
+                session_index,
+                0,
+            ),
+            "traj": 0,
+            "chain_id": 1,
+            "turn": 1,
+            "type": "llm",
+            "tools": "",
+            "content": "monitor smoke",
+            "prompt_tokens": 16,
+            "completion_tokens": 4,
+            "finish_reason": "stop",
+            "status": "success",
+            "error": "",
+        },
+    )
+
+    session.finish(
+        trajectories=[
+            _SmokeTrajectory(
+                chain_id=1,
+                reward_score=1.0,
+                num_turns=1,
+            )
+        ],
+        status="success",
+        runner_name="monitor-smoke",
+        reward_source="protocol-test",
+        finished=True,
+    )
+
+    search = _wait_for_json(
+        f"{monitor_stack['tempo']}/api/search",
+        params={
+            "q": (
+                f'{{ name = "gateway_generation" && '
+                f'span.experiment_name = "{experiment_name}" }}'
+            )
+        },
+        ready=lambda data: bool(data.get("traces")),
+    )
+    trace_id = search["traces"][0]["traceID"]
+    trace = _wait_for_json(f"{monitor_stack['tempo']}/api/traces/{trace_id}")
+    serialized_trace = json.dumps(trace)
+    assert "gateway_generation" in serialized_trace
+    assert experiment_name in serialized_trace
+
+    metric_payload = _wait_for_json(
+        f"{monitor_stack['prometheus']}/api/v1/query",
+        params={
+            "query": (
+                "rl_insight_monitor_agent_loop_run_info"
+                f'{{project="{project}",experiment_name="{experiment_name}"}}'
+            )
+        },
+        ready=lambda data: bool(data.get("data", {}).get("result")),
+    )
+    result = metric_payload["data"]["result"][0]
+    assert result["metric"]["project"] == project
+    assert result["metric"]["experiment_name"] == experiment_name

@@ -1,0 +1,316 @@
+# Copyright (c) 2026 verl-project authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Unit tests for Prometheus metrics and target registration."""
+
+from __future__ import annotations
+
+import multiprocessing
+from functools import partial
+from typing import Any
+from unittest.mock import MagicMock
+
+import pytest
+import yaml
+from prometheus_client import CollectorRegistry, Gauge, make_wsgi_app
+
+from rl_insight.utils import prometheus_utils as prometheus_module
+from rl_insight.utils.protocol import RunContext
+
+
+def _register_target_in_process(
+    config_file: str, targets_file: str, start_event, index: int
+) -> None:
+    store = prometheus_module.PrometheusTargetStore(
+        config_file, 9090, targets_file=targets_file
+    )
+    start_event.wait()
+    store.register(
+        "trainers",
+        [prometheus_module.PrometheusTarget(f"host-{index}:9000")],
+    )
+
+
+def _samples(collector: Any) -> dict[str, Any]:
+    return {
+        sample.name: sample
+        for metric in collector.collect()
+        for sample in metric.samples
+    }
+
+
+def test_metric_registry_should_store_real_samples_when_all_metric_types_are_recorded() -> (
+    None
+):
+    registry = prometheus_module.MetricRegistry(namespace="monitor_ut")
+    registry.count(
+        "steps", "Steps", 2, defaults={"worker": "old"}, labels={"worker": "w0"}
+    )
+    registry.value("reward", "Reward", 1.5, labels={"worker": "w0"})
+    registry.distribution(
+        "latency", "Latency", 12, labels={"worker": "w0"}, buckets=(10, 20)
+    )
+
+    counter = _samples(next(iter(registry._counters.values())))
+    gauge = _samples(next(iter(registry._gauges.values())))
+    histogram = _samples(next(iter(registry._histograms.values())))
+    assert counter["monitor_ut_steps_total"].value == 2
+    assert counter["monitor_ut_steps_total"].labels == {"worker": "w0"}
+    assert gauge["monitor_ut_reward"].value == 1.5
+    assert histogram["monitor_ut_latency_count"].value == 1
+    assert histogram["monitor_ut_latency_sum"].value == 12
+
+
+@pytest.mark.parametrize(
+    "accept",
+    [
+        "text/plain; version=0.0.4",
+        "application/openmetrics-text; version=1.0.0",
+    ],
+)
+def test_metric_registry_should_escape_names_for_legacy_scrapers(
+    monkeypatch: pytest.MonkeyPatch, accept: str
+) -> None:
+    collectors = CollectorRegistry()
+    monkeypatch.setattr(prometheus_module, "Gauge", partial(Gauge, registry=collectors))
+    registry = prometheus_module.MetricRegistry()
+    registry.value("train_loss", "Training loss", 0.5)
+    registry.value(
+        "val-aux_openai_gsm8k_reward_mean@1",
+        "Validation reward",
+        0.17,
+        labels={"dataset": "openai/gsm8k"},
+    )
+
+    start_response = MagicMock()
+    body = b"".join(
+        make_wsgi_app(collectors)(
+            {
+                "REQUEST_METHOD": "GET",
+                "PATH_INFO": "/metrics",
+                "QUERY_STRING": "",
+                "HTTP_ACCEPT": accept,
+            },
+            start_response,
+        )
+    ).decode()
+
+    assert start_response.call_args.args[0] == "200 OK"
+    assert "train_loss 0.5\n" in body
+    assert 'val_aux_openai_gsm8k_reward_mean_1{dataset="openai/gsm8k"} 0.17\n' in body
+
+
+def test_register_should_write_file_sd_targets_without_changing_main_config(
+    tmp_path,
+) -> None:
+    config_file = tmp_path / "prometheus.yml"
+    original_config = {"global": {"scrape_interval": "10s"}}
+    config_file.write_text(yaml.safe_dump(original_config), encoding="utf-8")
+    store = prometheus_module.PrometheusTargetStore(config_file, 9090)
+
+    result = store.register(
+        "trainers",
+        [
+            prometheus_module.PrometheusTarget("host-a:9000", {"rank": 0}),
+            prometheus_module.PrometheusTarget("host-b:9000"),
+        ],
+    )
+
+    targets_file = tmp_path / "prometheus-targets.yml"
+    saved = yaml.safe_load(targets_file.read_text(encoding="utf-8"))
+    assert result["target_count"] == 2
+    assert yaml.safe_load(config_file.read_text(encoding="utf-8")) == original_config
+    assert saved == [
+        {
+            "targets": ["host-a:9000"],
+            "labels": {"rl_insight_job": "trainers", "rank": "0"},
+        },
+        {
+            "targets": ["host-b:9000"],
+            "labels": {"rl_insight_job": "trainers"},
+        },
+    ]
+
+    store.register(
+        "trainers",
+        [prometheus_module.PrometheusTarget("host-b:9000", {"rank": 1})],
+    )
+    saved = yaml.safe_load(targets_file.read_text(encoding="utf-8"))
+    assert saved[1] == {
+        "targets": ["host-b:9000"],
+        "labels": {"rl_insight_job": "trainers", "rank": "1"},
+    }
+
+
+def test_reload_should_post_to_local_prometheus_when_store_is_configured(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    response = MagicMock()
+    session_mock = MagicMock()
+    session_mock.post = MagicMock(return_value=response)
+    session_mock.__enter__ = MagicMock(return_value=session_mock)
+    session_mock.__exit__ = MagicMock(return_value=False)
+    monkeypatch.setattr(
+        prometheus_module.requests, "Session", MagicMock(return_value=session_mock)
+    )
+    monkeypatch.setattr(
+        prometheus_module, "local_addresses", lambda: {"loopback": "127.0.0.1"}
+    )
+    store = prometheus_module.PrometheusTargetStore(tmp_path / "prometheus.yml", 9090)
+
+    assert store.reload() is True
+    session_mock.post.assert_called_once_with(
+        "http://127.0.0.1:9090/-/reload", timeout=5
+    )
+    response.raise_for_status.assert_called_once_with()
+
+
+def test_register_should_preserve_concurrent_cross_process_updates(tmp_path) -> None:
+    config_file = tmp_path / "prometheus.yml"
+    targets_file = tmp_path / "prometheus-targets.yml"
+    context = multiprocessing.get_context("spawn")
+    start_event = context.Event()
+    processes = [
+        context.Process(
+            target=_register_target_in_process,
+            args=(str(config_file), str(targets_file), start_event, index),
+        )
+        for index in range(8)
+    ]
+
+    for process in processes:
+        process.start()
+    start_event.set()
+    for process in processes:
+        process.join(timeout=10)
+
+    assert [process.exitcode for process in processes] == [0] * len(processes)
+    saved = yaml.safe_load(targets_file.read_text(encoding="utf-8"))
+    assert {group["targets"][0] for group in saved} == {
+        f"host-{index}:9000" for index in range(8)
+    }
+
+
+def test_update_prometheus_config_should_send_normalized_targets_when_server_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = MagicMock(status_code=200)
+    post = MagicMock(return_value=response)
+    monkeypatch.setenv("RL_INSIGHT_SERVER_URL", "http://server:18080/")
+    monkeypatch.setattr(prometheus_module.requests, "post", post)
+
+    prometheus_module.update_prometheus_config(
+        ["host-a:9000", "host-b:9000"],
+        job_name="workers",
+        labels=[{"rank": 0}, None],
+        context=RunContext("p", "e", "http://server:18080"),
+    )
+
+    post.assert_called_once_with(
+        "http://server:18080/api/v1/prometheus/targets",
+        json={
+            "job_name": "workers",
+            "targets": [
+                {
+                    "target": "host-a:9000",
+                    "labels": {"rank": "0", "project": "p", "experiment_name": "e"},
+                },
+                {
+                    "target": "host-b:9000",
+                    "labels": {"project": "p", "experiment_name": "e"},
+                },
+            ],
+        },
+        timeout=10,
+    )
+    response.raise_for_status.assert_called_once_with()
+
+
+def test_update_prometheus_config_should_reject_mismatched_labels_when_lengths_differ() -> (
+    None
+):
+    with pytest.raises(ValueError, match="labels length must match"):
+        prometheus_module.update_prometheus_config(
+            ["host-a:9000", "host-b:9000"], labels=[{"rank": 0}]
+        )
+
+
+def test_update_prometheus_config_should_register_in_process_when_push_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rl_insight.client.push import poller as poller_module
+
+    registry = poller_module.TargetRegistry()
+    poller_module.set_active_registry(registry)
+    post = MagicMock(side_effect=AssertionError("push backend must not POST"))
+    monkeypatch.delenv("RL_INSIGHT_SERVER_URL", raising=False)
+    monkeypatch.setattr(prometheus_module.requests, "post", post)
+    try:
+        prometheus_module.update_prometheus_config(
+            ["host-a:9000", "host-b:9000"], labels=[{"rank": 0}, None]
+        )
+    finally:
+        poller_module.set_active_registry(None)
+
+    assert [(t.address, t.labels) for t in registry.snapshot()] == [
+        ("host-a:9000", {"rank": "0"}),
+        ("host-b:9000", {}),
+    ]
+    post.assert_not_called()
+
+
+def test_deferred_targets_drop_permanent_errors_and_keep_transient_failures(
+    monkeypatch,
+):
+    from rl_insight.utils.protocol import RunContext
+
+    context = RunContext.create("p", "e", "http://server")
+    item = (["host:9000"], "workers", None)
+    monkeypatch.setattr(prometheus_module, "_pending_targets", [item])
+    post = MagicMock(return_value=MagicMock(status_code=409, text="identity conflict"))
+    monkeypatch.setattr(prometheus_module.requests, "post", post)
+    prometheus_module.flush_pending_targets(context)
+    assert not prometheus_module._pending_targets
+    prometheus_module._pending_targets.append(item)
+    post.side_effect = prometheus_module.requests.ConnectionError("offline")
+    prometheus_module.flush_pending_targets(context)
+    assert prometheus_module._pending_targets == [item]
+
+
+def test_native_registration_retries_transient_ray_failures(monkeypatch):
+    from rl_insight.client import ray_monitor_client as client
+    from rl_insight.client.push import poller
+
+    error = client.ray.exceptions.GetTimeoutError()
+    monkeypatch.setattr(prometheus_module, "_pending_targets", [])
+    monkeypatch.setattr(prometheus_module, "_pending_probe", MagicMock())
+    monkeypatch.setattr(prometheus_module, "_bootstrap_push_registry", lambda: None)
+    monkeypatch.setattr(poller, "get_active_registry", lambda: None)
+    monkeypatch.setattr(client, "initialize_current_job_connection", lambda: None)
+    monkeypatch.setattr(client, "current_job_config", lambda: {"sdk_version": "0.4.0"})
+    monkeypatch.setattr(prometheus_module.time, "sleep", lambda seconds: None)
+    attempts = 0
+
+    def register(*args):
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise error
+        return True
+
+    monkeypatch.setattr(client, "register_job_metrics", register)
+    prometheus_module.update_prometheus_config(["worker:9000"], "native")
+    assert prometheus_module._pending_targets == [(["worker:9000"], "native", None)]
+    prometheus_module._wait_for_context()
+    assert not prometheus_module._pending_targets

@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rl-insight"
+version = "0.4.0"
+description = "Performance insight tools for reinforcement learning frameworks."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+  { name = "rl-insight contributors", email = "huxiaobo@zju.edu.cn" },
+]
+dependencies = [
+  "ray",
+  "omegaconf",
+  "fastapi",
+  "uvicorn",
+  "requests",
+  "packaging",
+  "prometheus_client>=0.23.1",
+  "opentelemetry-sdk",
+  "opentelemetry-exporter-otlp-proto-http",
+  "pyyaml",
+  "psutil",
+]
+
+[project.optional-dependencies]
+recipe = [
+  "numpy",
+  "scikit-learn",
+  "scipy",
+  "pandas",
+  "plotly",
+  "matplotlib",
+  "loguru",
+  "kaleido",
+  "torch",
+  "ijson",
+]
+test = [
+  "pytest",
+]
+
+[project.scripts]
+rl-insight = "rl_insight.cli:main"
+rl-insight-recipe = "recipe:main"
+
+[project.urls]
+Homepage = "https://github.com/verl-project/rl-insight"
+Source = "https://github.com/verl-project/rl-insight"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rl_insight", "rl_insight.*", "recipe", "recipe.*"]
+
+[tool.setuptools.package-data]
+rl_insight = [
+  "config/*.yaml",
+  "config/*.yml",
+  "config/services/prometheus/*.yml",
+  "config/services/prometheus/*.yaml",
+  "config/services/tempo/*.yml",
+  "config/services/tempo/*.yaml",
+  "config/services/grafana/*.ini",
+  "config/services/grafana/provisioning/datasources/*.yml",
+  "config/services/grafana/provisioning/dashboards/*.yml",
+  "config/services/grafana/dashboards/*.json",
+  "config/services/grafana/dashboards/*/*.json",
+]
+recipe = [
+  "config/*.yaml",
+  "config/*.yml",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

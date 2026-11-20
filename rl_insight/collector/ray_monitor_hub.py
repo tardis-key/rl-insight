@@ -1,0 +1,285 @@
+# Copyright (c) 2026 verl-project authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Ray named actor that collects monitor events and exposes a metrics endpoint."""
+
+from __future__ import annotations
+
+import logging
+import os
+from dataclasses import replace
+from typing import Any, TYPE_CHECKING
+
+import ray
+from omegaconf import DictConfig, OmegaConf
+
+from .. import __version__
+from ..server.http_api import initialize_server_connection
+from ..server.network import format_host_port, service_url_from_server_url
+from ..utils import (
+    MetricRegistry,
+    MonitorEventKind,
+    OpenTelemetryTraceCollector,
+    start_metrics_http_server,
+    update_prometheus_config,
+)
+from ..utils.constants import MonitorEnv, MonitorRayActor
+from ..utils.protocol import RunContext, RunError, require_version
+from .base import MonitorCollector
+
+if TYPE_CHECKING:
+    from ..server.services import SDKServices
+    from ..client.base import MonitorClient
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
+
+__all__ = ["MonitorHubActor"]
+
+
+@ray.remote
+class MonitorHubActor(MonitorCollector):
+    """Ray detached actor: receives monitor events from trainers, serves ``/metrics``, optional OTLP traces.
+
+    Actor methods run one at a time (no ``max_concurrency``), so hub state updates are serialized.
+
+    On startup it registers its metrics endpoint with the RL-Insight server.
+    """
+
+    def __init__(self, conf: DictConfig, owner_token: str = "") -> None:
+        self._sdk_services: SDKServices | None = None
+        self._delegate: MonitorClient | None = None
+        self._owner_token = owner_token
+        try:
+            self._initialize(conf)
+        except BaseException:
+            if self._delegate is not None:
+                self._delegate.close()
+            if self._sdk_services is not None:
+                self._sdk_services.close(failed=True)
+            raise
+
+    def _initialize(self, conf: DictConfig) -> None:
+        """
+        Args:
+            conf: Merged monitor config with ``server`` and ``prometheus`` sections.
+        """
+        startup = conf.get("hub", {})
+        self._conf = OmegaConf.create(OmegaConf.to_container(conf, resolve=False))
+        self._conf.pop("hub", None)
+        if startup.get("services") is not None:
+            from ..server.services import SDKServices
+
+            self._sdk_services = SDKServices(startup.services)
+            self._conf = OmegaConf.merge(self._conf, self._sdk_services.sdk_config)
+            os.environ[MonitorEnv.SERVER_URL] = str(self._conf.server.url)
+        if startup.get("output") is not None:
+            from ..client import create_monitor_client
+
+            self._delegate = create_monitor_client(startup.output)
+            if self._delegate is None:
+                raise RuntimeError("No monitoring client was created for task outputs")
+            self._conf.server.metrics_endpoint = getattr(
+                self._delegate, "metrics_endpoint", ""
+            )
+        if startup:
+            self._conf.config_signature = startup.signature
+            self._conf.close_timeout = startup.close_timeout
+        conf = self._conf
+        self._events_applied = 0
+        self._node_ip = ray.util.get_node_ip_address()
+        self._metrics_port = 0
+        if self._delegate is not None:
+            return
+
+        namespace = str(self._conf.server.namespace)
+        metadata = conf.get("run_metadata", {})
+        self._context = RunContext.create(
+            str(metadata.get("project", "uncategorized")),
+            str(metadata.get("experiment_name", "unnamed")),
+            str(conf.server.url),
+        )
+        services = initialize_server_connection()
+        self._services = services
+        trace_endpoint = service_url_from_server_url(
+            str(self._conf.server.url),
+            services.get("otlp_port"),
+            "/v1/traces",
+        )
+        self._registry = MetricRegistry(namespace=namespace)
+        self._registry.value(
+            "experiment_info",
+            "Experiment execution identity.",
+            1,
+            {},
+            self._context.labels(),
+        )
+        self._trace_collector = OpenTelemetryTraceCollector(
+            namespace=namespace, endpoint=trace_endpoint
+        )
+
+        self._events_applied = 0
+        self._node_ip = ray.util.get_node_ip_address()
+        self._metrics_port = int(self._conf.prometheus.metrics_report_port)
+        self._event_handlers = {
+            MonitorEventKind.COUNTER: self._handle_counter,
+            MonitorEventKind.GAUGE: self._handle_gauge,
+            MonitorEventKind.HISTOGRAM: self._handle_histogram,
+            MonitorEventKind.TRACE: self._handle_trace,
+        }
+
+        start_metrics_http_server(self._metrics_port, addr=self._node_ip)
+        update_prometheus_config(
+            [format_host_port(self._node_ip, self._metrics_port)],
+            context=self._context,
+            identity_in_metrics=True,
+        )
+        logger.info(
+            "[rl-insight] MonitorHubActor HTTP bind %s:%s, "
+            "Prometheus scrape target %s:%s",
+            self._node_ip,
+            self._metrics_port,
+            self._node_ip,
+            self._metrics_port,
+        )
+
+    def connect(self, client_version: str | None = None) -> RunContext | None:
+        """Verify the connecting SDK once before it submits monitor events."""
+        require_version(client_version, "Client")
+        return self.get_context()
+
+    def apply_event(self, event: dict[str, Any]) -> None:
+        """Dispatch one event by ``kind``: counter/gauge/histogram update Prometheus registry, trace exports OTLP.
+
+        Args:
+            event: Must include ``kind``; metric kinds need ``name``/``value``; trace needs ``start_time_ns``/``end_time_ns``.
+        """
+        self._events_applied += 1
+        if self._delegate is not None:
+            self._delegate.apply_event(event)
+            return
+        event = dict(event)
+        field = (
+            "attributes" if event.get("kind") == MonitorEventKind.TRACE else "labels"
+        )
+        event[field] = self._context.labels(event.get(field))
+        try:
+            kind = event["kind"]
+        except KeyError as e:
+            raise ValueError(f"Event missing required field: {e!r}") from e
+
+        handler = self._event_handlers.get(kind)
+        if handler is None:
+            raise ValueError(f"Unknown event kind: {kind!r}")
+        handler(event)
+
+    def get_context(self) -> RunContext | None:
+        if self._delegate is not None:
+            return self._delegate.get_context()
+        return replace(
+            self._context,
+            actor_name=MonitorRayActor.NAME,
+            namespace=MonitorRayActor.NAMESPACE,
+            node_ip=self._node_ip,
+            metrics_endpoint="http://"
+            + format_host_port(self._node_ip, self._metrics_port)
+            + "/metrics",
+            otlp_endpoint=service_url_from_server_url(
+                str(self._conf.server.url),
+                self._services.get("otlp_port"),
+                "/v1/traces",
+            ),
+            prometheus_metrics_enabled=True,
+            otel_traces_enabled=self._trace_collector.enabled,
+            events_applied=self._events_applied,
+        )
+
+    def get_monitor_config(self):
+        return {
+            **OmegaConf.to_container(self._conf, resolve=False),
+            "sdk_version": __version__,
+        }
+
+    def register_native_metrics(self, addresses, job, labels):
+        if self._delegate is not None:
+            return self._delegate.register_metrics(addresses, job, labels)
+        return False
+
+    def close_services(self, token):
+        if token != self._owner_token:
+            raise RunError("Only the initializing process can close task services", 409)
+        if self._delegate is not None:
+            self._delegate.close()
+        if self._sdk_services is not None:
+            self._sdk_services.close()
+
+    def _handle_counter(self, event: dict[str, Any]) -> None:
+        """Increment a Prometheus counter from a ``counter`` event payload."""
+        self._registry.count(
+            event["name"],
+            event.get("documentation") or "",
+            float(event["value"]),
+            {},
+            dict(event.get("labels") or {}),
+        )
+
+    def _handle_gauge(self, event: dict[str, Any]) -> None:
+        """Set a Prometheus gauge from a ``gauge`` event payload."""
+        self._registry.value(
+            event["name"],
+            event.get("documentation") or "",
+            float(event["value"]),
+            {},
+            dict(event.get("labels") or {}),
+        )
+
+    def _handle_histogram(self, event: dict[str, Any]) -> None:
+        """Observe one sample on a Prometheus histogram from a ``histogram`` event payload."""
+        self._registry.distribution(
+            event["name"],
+            event.get("documentation") or "",
+            float(event["value"]),
+            {},
+            dict(event.get("labels") or {}),
+            buckets=None,
+        )
+
+    def _handle_trace(self, event: dict[str, Any]) -> None:
+        """Export one trace span via OTLP (no-op if collector disabled)."""
+        if not self._trace_collector.enabled:
+            return
+        attrs = dict(event.get("attributes") or {})
+        self._export_trace_span(
+            event["name"],
+            int(event["start_time_ns"]),
+            int(event["end_time_ns"]),
+            attrs,
+        )
+
+    def _export_trace_span(
+        self,
+        name: str,
+        start_time_ns: int,
+        end_time_ns: int,
+        attributes: dict[str, Any],
+    ) -> None:
+        """Export one root span via OTLP (no-op if collector disabled)."""
+        if not self._trace_collector.enabled:
+            return
+        self._trace_collector.record_span(
+            name,
+            start_time_ns,
+            end_time_ns,
+            attributes=attributes,
+        )
