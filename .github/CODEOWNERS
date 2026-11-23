@@ -1,0 +1,48 @@
+# CODEOWNERS for tardis-key/rl-insight
+#
+# Syntax: <pattern> <owner>...
+# The LAST matching pattern wins, so broad rules come first and
+# specific overrides come last.
+#
+# Every owner must have explicit write access to this repository,
+# otherwise GitHub silently ignores the entry.
+# Current users: tardis-key (admin), mayunaise (write), mengchengTang (write)
+
+# Default: every change needs one of the maintainers
+*                                                   @tardis-key @mayunaise @mengchengTang
+
+# Entry docs and community files
+/README.md                                          @tardis-key @mengchengTang
+/CONTRIBUTING.md                                    @tardis-key @mengchengTang
+/assets/                                           @tardis-key @mengchengTang
+
+# Package metadata, dependency and lint configs
+/pyproject.toml                                     @tardis-key @mengchengTang
+/requirements.txt                                   @tardis-key @mengchengTang
+/.pre-commit-config.yaml                            @tardis-key @mengchengTang
+/.gitignore                                         @tardis-key
+/.dockerignore                                      @tardis-key
+/.readthedocs.yaml                                  @tardis-key @mengchengTang
+
+# CI, container and specialty checks
+/.github/                                           @tardis-key @mengchengTang
+/docker/                                            @tardis-key @mengchengTang
+
+# Runtime monitor: client / collector / server
+/rl_insight/                                        @tardis-key @mengchengTang
+/rl_insight/server/                                 @tardis-key
+/rl_insight/config/services/                         @tardis-key
+
+# Recipe pipeline: parsers, visualizers, degradation analysis
+/recipe/                                            @tardis-key @mayunaise
+/recipe/perf_analysis/                              @tardis-key @mayunaise
+
+# Docs, tests and agent skills
+/docs/                                              @tardis-key @mengchengTang
+/tests/                                             @tardis-key @mengchengTang
+/.agent/                                            @tardis-key
+/.claude/                                           @tardis-key
+/.codex/                                            @tardis-key
+
+# The ownership rules themselves stay with the maintainers only
+/.github/CODEOWNERS                                 @tardis-key
